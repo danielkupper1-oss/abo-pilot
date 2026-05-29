@@ -5,3 +5,29 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:80"
+    depends_on:
+      - abo-pilot-analysis
+
+  abo-pilot-analysis:
+    build:
+      context: .
+      dockerfile: Dockerfile.analysis
+    container_name: abo-pilot-analysis
+    restart: unless-stopped
+    environment:
+      PORT: "8787"
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      OLLAMA_MODEL: "qwen2.5:3b"
+      ANALYSIS_TIMEOUT_MS: "20000"
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: abo-pilot-ollama
+    restart: unless-stopped
+    profiles:
+      - ai
+    volumes:
+      - ollama-models:/root/.ollama
+
+volumes:
+  ollama-models:

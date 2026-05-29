@@ -37,7 +37,7 @@ Abo Pilot verhindert vergessene Kuendigungen, macht Kosten transparent und samme
 
 ## Technische Zielarchitektur
 
-- Frontend: React oder Next.js
+- Frontend: aktueller MVP statisch, spaeter Next.js beim Start von Auth/API/Postgres
 - Backend: Node.js/TypeScript API
 - Datenbank: Postgres
 - Auth: E-Mail/Login, OAuth optional
@@ -48,16 +48,30 @@ Abo Pilot verhindert vergessene Kuendigungen, macht Kosten transparent und samme
 
 ## Datenmodell MVP
 
+Das Zielmodell ist in [docs/DATA_MODEL.md](docs/DATA_MODEL.md) konkretisiert. Kernobjekte:
+
 - `users`
 - `households`
 - `household_members`
-- `subscriptions`
+- `contracts`
+- `mobile_contract_details`
+- `policy_details`
 - `providers`
-- `renewal_events`
+- `contacts`
 - `documents`
+- `reminders`
 - `secret_values`
 - `audit_log`
 - `billing_customers`
+
+## Umgesetzte Handoff-Schritte
+
+1. Datenmodell finalisiert: siehe `docs/DATA_MODEL.md`.
+2. React/Next.js-Entscheid: MVP bleibt statisch, Migration mit Backend-Start.
+3. Dokumenten-Handling: Zielablauf in `docs/DOCUMENT_STORAGE.md`.
+4. Tags/Status/Fristen: Tags, Reminder-Datum und Reminder-Kanal sind im MVP erfasst; Status und Fristen bleiben strukturierte Felder.
+5. Backend-Architektur: siehe `docs/ARCHITECTURE.md`.
+6. GitHub und Deployment: vorbereitet in `docs/GITHUB_DEPLOYMENT_CHECKLIST.md`, Ausfuehrung nach Freigabe.
 
 ## Wichtig fuer zahlende Kunden
 

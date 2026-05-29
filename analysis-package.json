@@ -1,0 +1,9 @@
+{
+  "name": "abo-pilot-analysis",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "pdf-parse": "^1.1.1"
+  }
+}

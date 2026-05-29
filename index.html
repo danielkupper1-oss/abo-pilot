@@ -9,50 +9,71 @@
   <body>
     <div class="app">
       <aside class="sidebar" aria-label="Navigation">
-        <a class="brand" href="#dashboard" aria-label="Abo Pilot Dashboard">
-          <span class="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path d="M5 19V7.8c0-1 .8-1.8 1.8-1.8h10.4c1 0 1.8.8 1.8 1.8V19l-3-1.7-4 1.7-4-1.7L5 19Z" />
-              <path d="M8.5 10h7M8.5 13h5" />
-            </svg>
-          </span>
-          <span>
-            <strong>Abo Pilot</strong>
-            <small>Alles im Blick</small>
-          </span>
-        </a>
+        <div class="brand-row">
+          <label class="avatar-upload" title="Avatar hochladen">
+            <input id="avatarUpload" type="file" accept="image/*" />
+            <span class="brand-mark" aria-hidden="true">
+              <img id="avatarPreview" alt="" />
+              <svg id="avatarPlaceholder" viewBox="0 0 24 24">
+                <path d="M5 19V7.8c0-1 .8-1.8 1.8-1.8h10.4c1 0 1.8.8 1.8 1.8V19l-3-1.7-4 1.7-4-1.7L5 19Z" />
+                <path d="M8.5 10h7M8.5 13h5" />
+              </svg>
+            </span>
+          </label>
+          <a class="brand" href="#dashboard" aria-label="Abo Pilot Dashboard">
+            <span>
+              <strong>Abo Pilot</strong>
+              <small>Alles im Blick</small>
+            </span>
+          </a>
+          <button class="icon-button sidebar-theme-toggle" id="sidebarThemeToggle" type="button" aria-label="Darstellung wechseln">
+            <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z" /></svg>
+          </button>
+        </div>
 
         <nav class="nav-links">
-          <a class="active" href="#dashboard">
+          <a class="active" href="#dashboard" data-route="dashboard">
             <svg viewBox="0 0 24 24"><path d="M4 13h7V4H4v9ZM13 20h7V4h-7v16ZM4 20h7v-5H4v5Z" /></svg>
             Dashboard
           </a>
-          <a href="#subscriptions">
+          <a href="#subscriptions" data-route="subscriptions">
             <svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>
             Abos
           </a>
-          <a href="#family">
+          <a href="#family" data-route="family">
             <svg viewBox="0 0 24 24"><path d="M16 11a4 4 0 1 0-8 0M3.5 20a8.5 8.5 0 0 1 17 0M18 7.5a3 3 0 0 1 0 6M22 20a6 6 0 0 0-3-5.2" /></svg>
-            Familie
+            Handy
           </a>
-          <a href="#security">
+          <a href="#deadlines" data-route="deadlines">
+            <svg viewBox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 9h15M6.5 5h11A2.5 2.5 0 0 1 20 7.5v10A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5v-10A2.5 2.5 0 0 1 6.5 5ZM8 13h3M13 13h3M8 16h3" /></svg>
+            Fristen
+          </a>
+          <a href="#policies" data-route="policies">
+            <svg viewBox="0 0 24 24"><path d="M12 3 5.5 5.5v5.8c0 4.2 2.7 7.9 6.5 9.2 3.8-1.3 6.5-5 6.5-9.2V5.5L12 3ZM9 12l2 2 4-4" /></svg>
+            Policen
+          </a>
+          <a href="#archive" data-route="archive">
+            <svg viewBox="0 0 24 24"><path d="M4 7h16M6 7v12h12V7M9 11h6M8 4h8l1 3H7l1-3Z" /></svg>
+            Archiv
+          </a>
+          <a href="#security" data-route="security">
             <svg viewBox="0 0 24 24"><path d="M7 11V8a5 5 0 0 1 10 0v3M6.8 11h10.4c.9 0 1.6.7 1.6 1.6v6.8c0 .9-.7 1.6-1.6 1.6H6.8c-.9 0-1.6-.7-1.6-1.6v-6.8c0-.9.7-1.6 1.6-1.6Z" /></svg>
             Sicherheit
           </a>
-          <a href="#saas">
+          <a href="#saas" data-route="saas">
             <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 16V9M12 16V7M16 16v-5M20 16v-3" /></svg>
             SaaS Admin
           </a>
         </nav>
 
-        <section class="quick-card" id="saas">
+        <section class="quick-card">
           <span class="mini-label">SaaS bereit</span>
           <strong>Mandanten, Rollen, Reminder</strong>
-          <small>Vorbereitet fuer Accounts, Familien und bezahlte Plaene.</small>
+          <small>Vorbereitet für Accounts, Familien und bezahlte Pläne.</small>
         </section>
 
         <section class="sidebar-card">
-          <span class="mini-label">Naechste Frist</span>
+          <span class="mini-label">Nächste Frist</span>
           <strong id="nextDeadline">-</strong>
           <small id="nextDeadlineMeta">Keine Daten</small>
         </section>
@@ -61,13 +82,13 @@
       <main class="main">
         <header class="topbar">
           <div>
-            <h1>Abo Pilot</h1>
-            <p>Abos, Zeitungen, Magazine, Online-Dienste und Familien-Handyvertraege verwalten.</p>
+            <h1 id="pageTitle">Dashboard</h1>
+            <p id="pageSubtitle">Abos, Kosten, Fristen und Familien-Handyverträge im Überblick.</p>
           </div>
           <div class="topbar-actions">
             <label class="search-field">
               <svg viewBox="0 0 24 24"><path d="m21 21-4.4-4.4M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg>
-              <input id="globalSearch" type="search" placeholder="Abo, Anbieter, Person suchen" />
+              <input id="globalSearch" type="search" placeholder="Bestand durchsuchen" />
             </label>
             <button class="icon-button" id="themeToggle" type="button" aria-label="Darstellung wechseln">
               <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z" /></svg>
@@ -75,10 +96,10 @@
           </div>
         </header>
 
-        <section class="command-strip" aria-label="Schnellerfassung">
+        <section class="command-strip page-view" data-page="dashboard" aria-label="Schnellerfassung">
           <label class="hero-search">
             <svg viewBox="0 0 24 24"><path d="m21 21-4.4-4.4M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg>
-            <input id="commandProviderSearch" type="search" placeholder="Anbieter suchen, z. B. Netflix, Swisscom, NZZ..." />
+            <input id="commandProviderSearch" type="search" list="providerList" placeholder="Vorlage suchen, z. B. Swisscom" />
           </label>
           <select id="quickCategory" aria-label="Kategorie schnell filtern">
             <option>Alle Kategorien</option>
@@ -86,14 +107,19 @@
             <option>Zeitung</option>
             <option>Streaming</option>
             <option>Software</option>
+            <option>Police</option>
           </select>
-          <a class="button high-contrast" href="#subscriptionForm">
+          <a class="button high-contrast" href="#subscriptions" data-route="subscriptions" id="addSubscription">
             <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
-            Abo hinzufuegen
+            Abo hinzufügen
           </a>
+          <button class="button subtle" id="runAnalysis" type="button">
+            <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 16V9M12 16V7M16 16v-5M20 16v-3" /></svg>
+            Auswerten
+          </button>
         </section>
 
-        <section class="metric-grid" id="dashboard" aria-label="Kennzahlen">
+        <section class="metric-grid page-view" id="dashboard" data-page="dashboard" aria-label="Kennzahlen">
           <article class="metric-card">
             <span class="metric-icon wallet"><svg viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H19v14H6.5A2.5 2.5 0 0 1 4 16.5v-9ZM16 12h4M16 12a2 2 0 1 0 0 .01" /></svg></span>
             <span>Monatlich</span>
@@ -102,7 +128,7 @@
           </article>
           <article class="metric-card">
             <span class="metric-icon growth"><svg viewBox="0 0 24 24"><path d="M4 17 9 12l4 4 7-8M14 8h6v6" /></svg></span>
-            <span>Jaehrlich</span>
+            <span>Jährlich</span>
             <strong id="yearlyTotal">CHF 0</strong>
             <small>hochgerechnet</small>
           </article>
@@ -110,7 +136,7 @@
             <span class="metric-icon alarm"><svg viewBox="0 0 24 24"><path d="M12 7v5l3 2M5 4 3 6M19 4l2 2M6.5 20 8 18M17.5 20 16 18M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" /></svg></span>
             <span>Handeln</span>
             <strong id="actionCount">0</strong>
-            <small>Fristen in 45 Tagen</small>
+            <small id="actionMeta">Fristen in 45 Tagen</small>
           </article>
           <article class="metric-card">
             <span class="metric-icon vault"><svg viewBox="0 0 24 24"><path d="M8 11V8a4 4 0 0 1 8 0v3M7 11h10v9H7v-9ZM12 15v2" /></svg></span>
@@ -120,150 +146,355 @@
           </article>
         </section>
 
-        <section class="provider-rail" aria-label="Hauefige Anbieter">
-          <strong>Hauefige Anbieter</strong>
+        <section class="provider-rail page-view" data-page="dashboard" aria-label="Häufige Anbieter">
+          <strong>Häufige Anbieter</strong>
           <div id="providerRail"></div>
         </section>
 
-        <section class="workspace">
+        <section class="analysis-panel page-view" data-page="dashboard" aria-label="Analyse">
+          <article class="panel">
+            <div class="panel-heading">
+              <div>
+                <span class="mini-label" id="analysisSource">Regeln + Ollama intern</span>
+                <h2>Auswertung</h2>
+              </div>
+              <button class="button primary" id="refreshAnalysis" type="button">Aktualisieren</button>
+            </div>
+            <div id="analysisContent" class="analysis-content">
+              Starte eine Auswertung, um Fristen, Kosten und unvollständige Verträge priorisiert zu prüfen.
+            </div>
+          </article>
+        </section>
+
+        <section class="deadline-board page-view" id="deadlines" data-page="dashboard deadlines" aria-label="Fristen und Kalender">
+          <article class="panel deadline-agenda">
+            <div class="panel-heading">
+              <div>
+                <span class="mini-label">Kalender</span>
+                <h2>Fristen-Zentrale</h2>
+              </div>
+              <span class="status-pill" id="deadlineStatus">0 offen</span>
+            </div>
+            <div id="deadlineAgenda" class="deadline-agenda-list"></div>
+          </article>
+
+          <article class="panel renewal-calendar">
+            <div class="panel-heading">
+              <div>
+                <span class="mini-label">Erneuerungen</span>
+                <h2>Nächste Monate</h2>
+              </div>
+            </div>
+            <div id="renewalCalendar" class="calendar-grid"></div>
+          </article>
+        </section>
+
+        <dialog id="editorDialog" class="editor-dialog">
           <article class="panel form-panel" aria-label="Abo erfassen">
             <div class="panel-heading">
               <div>
                 <span class="mini-label">Erfassung</span>
-                <h2>Abo anlegen</h2>
+                <h2 id="editorTitle">Abo anlegen</h2>
               </div>
-              <button class="button subtle" id="resetForm" type="button">Leeren</button>
+              <div class="panel-actions">
+                <button class="button subtle" id="resetForm" type="button">Leeren</button>
+                <button class="button subtle" id="closeEditor" type="button">Schliessen</button>
+              </div>
             </div>
 
             <form id="subscriptionForm" autocomplete="off">
-              <label class="full">
-                Anbieter suchen
-                <input id="providerSearch" type="search" list="providerList" placeholder="z. B. Netflix, NZZ, Swisscom" />
-                <datalist id="providerList"></datalist>
-              </label>
+              <fieldset>
+                <legend>Basisdaten</legend>
+                <label class="full">
+                  Anbieter suchen
+                  <input id="providerSearch" type="search" list="providerList" placeholder="z. B. Netflix, NZZ, Swisscom" />
+                  <datalist id="providerList"></datalist>
+                </label>
+                <div class="provider-chips" id="providerChips" aria-label="Gängige Abos"></div>
+                <label>
+                  Name
+                  <input id="name" required placeholder="z. B. Familien Mobile XL" />
+                </label>
+                <label>
+                  Kategorie
+                  <select id="category">
+                    <option>Zeitung</option>
+                    <option>Magazin</option>
+                    <option>Online-Abo</option>
+                    <option>Streaming</option>
+                    <option>Software</option>
+                    <option>Handy Familie</option>
+                    <option>Cloud</option>
+                    <option>Police</option>
+                    <option>Sonstiges</option>
+                  </select>
+                </label>
+                <label>
+                  Kosten
+                  <input id="amount" required type="number" min="0" step="0.05" placeholder="19.90" />
+                </label>
+                <label>
+                  Intervall
+                  <select id="interval">
+                    <option value="monthly">Monatlich</option>
+                    <option value="quarterly">Quartalsweise</option>
+                    <option value="yearly">Jährlich</option>
+                  </select>
+                </label>
+              </fieldset>
 
-              <div class="provider-chips" id="providerChips" aria-label="Gaengige Abos"></div>
+              <fieldset>
+                <legend>Fristen</legend>
+                <label>
+                  Startdatum
+                  <input id="startDate" type="date" />
+                </label>
+                <label>
+                  Erneuerung
+                  <input id="renewalDate" type="date" />
+                </label>
+                <label id="endDateLabel">
+                  Bis-/Enddatum
+                  <input id="endDate" type="date" />
+                </label>
+                <label class="check-label full" id="noRenewalLabel">
+                  <input id="noRenewal" type="checkbox" />
+                  <span>Keine Erneuerung / einmalige Police</span>
+                </label>
+                <label>
+                  Kündigungsfrist
+                  <select id="noticeDays">
+                    <option value="1">1 Tag</option>
+                    <option value="7">7 Tage</option>
+                    <option value="14">14 Tage</option>
+                    <option value="30" selected>30 Tage</option>
+                    <option value="60">60 Tage</option>
+                    <option value="90">90 Tage</option>
+                    <option value="0">Keine Frist</option>
+                  </select>
+                </label>
+                <label>
+                  Status
+                  <select id="status">
+                    <option value="Aktiv">Aktiv</option>
+                    <option value="Probeabo">Probeabo</option>
+                    <option value="Gekuendigt">Gekündigt</option>
+                    <option value="Pausiert">Pausiert</option>
+                  </select>
+                </label>
+              </fieldset>
 
-              <label>
-                Name
-                <input id="name" required placeholder="z. B. Familien Mobile XL" />
-              </label>
-              <label>
-                Kategorie
-                <select id="category">
-                  <option>Zeitung</option>
-                  <option>Magazin</option>
-                  <option>Online-Abo</option>
-                  <option>Streaming</option>
-                  <option>Software</option>
-                  <option>Handy Familie</option>
-                  <option>Cloud</option>
-                  <option>Sonstiges</option>
-                </select>
-              </label>
-              <label>
-                Kosten
-                <input id="amount" required type="number" min="0" step="0.05" placeholder="19.90" />
-              </label>
-              <label>
-                Intervall
-                <select id="interval">
-                  <option value="monthly">Monatlich</option>
-                  <option value="quarterly">Quartalsweise</option>
-                  <option value="yearly">Jaehrlich</option>
-                </select>
-              </label>
-              <label>
-                Startdatum
-                <input id="startDate" type="date" />
-              </label>
-              <label>
-                Erneuerung
-                <input id="renewalDate" required type="date" />
-              </label>
-              <label>
-                Kuendigungsfrist
-                <select id="noticeDays">
-                  <option value="7">7 Tage</option>
-                  <option value="14">14 Tage</option>
-                  <option value="30" selected>30 Tage</option>
-                  <option value="60">60 Tage</option>
-                  <option value="90">90 Tage</option>
-                </select>
-              </label>
-              <label>
-                Status
-                <select id="status">
-                  <option>Aktiv</option>
-                  <option>Probeabo</option>
-                  <option>Gekuendigt</option>
-                  <option>Pausiert</option>
-                </select>
-              </label>
-              <label>
-                Login-E-Mail
-                <input id="loginEmail" type="email" placeholder="name@example.com" />
-              </label>
-              <label>
-                Anbieter-E-Mail
-                <input id="supportEmail" type="email" placeholder="support@anbieter.ch" />
-              </label>
-              <label class="full">
-                Adresse / Kontakt
-                <textarea id="address" rows="3" placeholder="Verlag, Kundendienst, Postadresse oder Support-Link"></textarea>
-              </label>
-              <label>
-                Familienmitglied
-                <input id="familyMember" placeholder="z. B. Anna" />
-              </label>
-              <label>
-                SIM / Vertragsnummer
-                <input id="contractNumber" placeholder="Kundennummer, SIM, Vertrag" />
-              </label>
-              <label>
-                PIN
-                <input id="pin" type="password" inputmode="numeric" placeholder="nur fuer Handy-Abos" />
-              </label>
-              <label>
-                PUK
-                <input id="puk" type="password" inputmode="numeric" placeholder="optional" />
-              </label>
-              <label class="full">
-                Notizen
-                <textarea id="notes" rows="3" placeholder="Kuendigungsweg, Besonderheiten, letzte Preisaenderung"></textarea>
-              </label>
-              <button class="button primary full" type="submit">
+              <fieldset>
+                <legend>Struktur</legend>
+                <label class="full">
+                  Tags
+                  <input id="tags" placeholder="z. B. Familie, Steuer, kritisch" />
+                </label>
+                <label>
+                  Reminder-Datum
+                  <input id="reminderDate" type="date" />
+                </label>
+                <label>
+                  Reminder-Kanal
+                  <select id="reminderChannel">
+                    <option value="none">Noch keiner</option>
+                    <option value="app">App</option>
+                    <option value="email">E-Mail</option>
+                    <option value="calendar">Kalender</option>
+                  </select>
+                </label>
+              </fieldset>
+
+              <fieldset>
+                <legend>Kontakt</legend>
+                <label>
+                  Login-E-Mail
+                  <input id="loginEmail" type="email" placeholder="name@example.com" />
+                </label>
+                <label>
+                  Anbieter-E-Mail
+                  <input id="supportEmail" type="email" placeholder="support@anbieter.ch" />
+                </label>
+                <label class="full">
+                  Adresse / Kontakt
+                  <textarea id="address" rows="3" placeholder="Verlag, Kundendienst, Postadresse oder Support-Link"></textarea>
+                </label>
+              </fieldset>
+
+              <fieldset class="family-fields" id="familyFields">
+                <legend>Familie und SIM</legend>
+                <label>
+                  Familienmitglied
+                  <input id="familyMember" placeholder="z. B. Anna" />
+                </label>
+                <label>
+                  SIM / Vertragsnummer
+                  <input id="contractNumber" placeholder="Kundennummer, SIM, Vertrag" />
+                </label>
+                <label>
+                  PIN
+                  <input id="pin" type="password" inputmode="numeric" placeholder="nur für Handy-Abos" />
+                </label>
+                <label>
+                  PUK
+                  <input id="puk" type="password" inputmode="numeric" placeholder="optional" />
+                </label>
+              </fieldset>
+
+              <fieldset>
+                <legend>Dokumente</legend>
+                <label class="full file-upload">
+                  PDF hinzufügen
+                  <input id="documentUpload" type="file" accept="application/pdf,.pdf" multiple />
+                  <small>PDFs werden lokal im Browser gespeichert. Für grosse Archive später Backend/Speicher anbinden.</small>
+                </label>
+              </fieldset>
+
+              <fieldset>
+                <legend>Notizen</legend>
+                <label class="full">
+                  Notizen
+                  <textarea id="notes" rows="3" placeholder="Kündigungsweg, Besonderheiten, letzte Preisänderung"></textarea>
+                </label>
+              </fieldset>
+
+              <button class="button primary full" id="saveSubscription" type="submit">
                 <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
                 Abo speichern
               </button>
             </form>
           </article>
+        </dialog>
 
-          <section class="panel list-panel" id="subscriptions">
+        <section class="workspace page-view" id="subscriptions" data-page="subscriptions">
+          <section class="panel list-panel">
             <div class="panel-heading">
               <div>
                 <span class="mini-label">Bestand</span>
                 <h2>Abos</h2>
               </div>
-              <div class="segmented" role="tablist" aria-label="Filter">
-                <button class="segment active" type="button" data-filter="all">Alle</button>
-                <button class="segment" type="button" data-filter="due">Frist</button>
-                <button class="segment" type="button" data-filter="family">Familie</button>
+              <div class="panel-actions">
+                <div class="segmented" role="tablist" aria-label="Filter">
+                  <button class="segment active" type="button" data-filter="all">Alle</button>
+                  <button class="segment" type="button" data-filter="due">Frist</button>
+                  <button class="segment" type="button" data-filter="canceled">Gekündigt</button>
+                </div>
+                <button class="button primary" id="addCoreSubscription" type="button">Abo hinzufügen</button>
               </div>
             </div>
             <div class="subscription-list" id="subscriptionList"></div>
+            <section class="canceled-active-section" id="canceledActiveSection">
+              <div class="inline-heading">
+                <div>
+                  <span class="mini-label">Gekündigt</span>
+                  <h3>Noch aktiv bis Enddatum</h3>
+                </div>
+                <span class="status-pill status-canceled" id="canceledActiveCount">0</span>
+              </div>
+              <div class="subscription-list compact-subscription-list" id="canceledActiveList"></div>
+            </section>
           </section>
 
           <aside class="panel detail-panel">
             <div class="panel-heading">
               <div>
                 <span class="mini-label">Details</span>
-                <h2 id="detailTitle">Abo auswaehlen</h2>
+                <h2 id="detailTitle">Abo auswählen</h2>
               </div>
               <span class="status-pill" id="detailStatus">-</span>
             </div>
-            <div id="detailContent" class="detail-empty">Waehle ein Abo aus der Liste oder lege ein neues an.</div>
+            <div id="detailContent" class="detail-empty">Wähle ein Abo aus der Liste oder lege ein neues an.</div>
           </aside>
+        </section>
+
+        <section class="insight-grid page-view" id="family" data-page="family" aria-label="Familie">
+          <article class="panel feature-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="mini-label">Verträge</span>
+                <h2>Handy-Abos</h2>
+              </div>
+              <button class="button primary" id="addPhoneSubscription" type="button">Handy hinzufügen</button>
+            </div>
+            <div id="familyOverview" class="compact-list"></div>
+          </article>
+          <aside class="panel feature-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="mini-label">Auswahl</span>
+                <h2>Handy-Abo Details</h2>
+              </div>
+            </div>
+            <div id="familyDetailSummary" class="overview-detail detail-empty">Wähle ein Handy-Abo aus.</div>
+          </aside>
+        </section>
+
+        <section class="insight-grid page-view" id="policies" data-page="policies" aria-label="Policen">
+          <article class="panel feature-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="mini-label">Verträge</span>
+                <h2>Policen</h2>
+              </div>
+              <button class="button primary" id="addPolicySubscription" type="button">Police hinzufügen</button>
+            </div>
+            <div id="policyOverview" class="compact-list"></div>
+          </article>
+          <aside class="panel feature-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="mini-label">Auswahl</span>
+                <h2>Police Details</h2>
+              </div>
+            </div>
+            <div id="policyDetailSummary" class="overview-detail detail-empty">Wähle eine Police aus.</div>
+          </aside>
+        </section>
+
+        <section class="insight-grid page-view" id="archive" data-page="archive" aria-label="Archiv">
+          <article class="panel feature-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="mini-label">Archiv</span>
+                <h2>Beendete Verträge</h2>
+              </div>
+              <span class="status-pill" id="archiveCount">0</span>
+            </div>
+            <div id="archiveOverview" class="compact-list"></div>
+          </article>
+          <aside class="panel feature-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="mini-label">Auswahl</span>
+                <h2>Archiv Details</h2>
+              </div>
+            </div>
+            <div id="archiveDetailSummary" class="overview-detail detail-empty">Wähle einen archivierten Eintrag aus.</div>
+          </aside>
+        </section>
+
+        <section class="insight-grid page-view" id="security" data-page="security" aria-label="Sicherheit">
+          <article class="panel feature-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="mini-label">Sicherheit</span>
+                <h2>Sensible Daten</h2>
+              </div>
+            </div>
+            <div id="securitySummary" class="compact-list"></div>
+          </article>
+        </section>
+
+        <section class="insight-grid page-view" id="saas" data-page="saas" aria-label="SaaS Admin">
+          <article class="panel feature-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="mini-label">SaaS Admin</span>
+                <h2>Ausbaupfad</h2>
+              </div>
+            </div>
+            <div id="adminSummary" class="compact-list"></div>
+          </article>
         </section>
       </main>
     </div>
@@ -276,6 +507,17 @@
         <menu>
           <button class="button subtle" value="cancel">Abbrechen</button>
           <button class="button primary" id="unlockConfirm" value="default">Entsperren</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="deleteDialog" class="unlock-dialog">
+      <form method="dialog">
+        <h2 id="deleteDialogTitle">Eintrag löschen?</h2>
+        <p id="deleteDialogText">Dieser Eintrag wird aus diesem Browser entfernt.</p>
+        <menu>
+          <button class="button subtle" id="deleteCancel" value="cancel">Abbrechen</button>
+          <button class="button danger" id="deleteConfirm" value="default">Endgültig löschen</button>
         </menu>
       </form>
     </dialog>

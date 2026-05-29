@@ -1,6 +1,6 @@
 # Deployment auf Hostinger VPS
 
-Diese Version von Abo Pilot ist ein statisches Frontend. Fuer den MVP reicht ein Nginx-Container.
+Diese Version von Abo Pilot besteht aus einem statischen Frontend, einem kleinen internen Analyse-Service und optional Ollama. Fuer den MVP liefert die Analyse auch ohne Ollama regelbasierte Ergebnisse.
 
 ## Voraussetzungen
 
@@ -25,7 +25,38 @@ cd abo-pilot
 docker compose up -d --build
 ```
 
-Die App laeuft danach lokal auf dem Server unter `http://127.0.0.1:8080`.
+Die App laeuft danach lokal auf dem Server unter `http://127.0.0.1:8080`. Die interne Analyse-API ist nur ueber Nginx unter `/api/analyze` und `/api/analyze-document` erreichbar.
+
+Vor dem ersten Push und Deployment siehe auch [docs/GITHUB_DEPLOYMENT_CHECKLIST.md](docs/GITHUB_DEPLOYMENT_CHECKLIST.md).
+
+## Ollama optional aktivieren
+
+Auf Hostinger KVM 2 laeuft Ollama CPU-basiert und sollte mit einem kleinen Modell starten. Der Ollama-Container ist deshalb hinter dem Compose-Profil `ai` versteckt:
+
+```bash
+docker compose --profile ai up -d --build
+docker compose exec ollama ollama pull qwen2.5:3b
+```
+
+Der Analyse-Service verwendet standardmaessig:
+
+```text
+OLLAMA_BASE_URL=http://ollama:11434
+OLLAMA_MODEL=qwen2.5:3b
+ANALYSIS_TIMEOUT_MS=20000
+```
+
+Wichtig fuer den VPS:
+
+- Ollama nicht direkt per Public Port veroeffentlichen.
+- Bei KVM 2 keine grossen 7B/13B-Modelle als Dauerlast einplanen.
+- Wenn Theater Kalender und Newsletter ebenfalls laufen, nur kleine Modelle und kurze Analysen nutzen.
+- Digitale PDFs werden per Text-Extraktion verarbeitet. Gescannte Bild-PDFs brauchen spaeter OCR und sollten auf KVM 2 nur optional laufen.
+- Falls der Server unter Last kommt, Ollama-Container stoppen und die regelbasierte Analyse weiterverwenden:
+
+```bash
+docker compose stop ollama
+```
 
 ## Nginx Reverse Proxy
 
@@ -79,4 +110,3 @@ Diese statische MVP-Version ist fuer Produktvalidierung und UI-Tests geeignet. F
 - Backups
 - Monitoring
 - rechtliche Seiten und Datenschutzprozesse
-
