@@ -30,22 +30,218 @@ python3 -m http.server 8080
 http://localhost:8080
 ```
 
-- Lokaler Git-Commit existiert:
+- Lokale Git-Commits existieren:
 
 ```text
 576f6eb Initial Abo Pilot MVP
+b63f6bd Prepare Abo Pilot for SaaS rollout
+01a13a0 Expose analysis health through API path
 ```
 
-- Es wurde nicht zu GitHub gepusht.
-- Kein Remote ist eingerichtet.
-- Gewuenschtes spaeteres GitHub-Ziel:
+- GitHub ist eingerichtet und `main` wurde gepusht:
 
 ```text
 https://github.com/danielkupper1-oss/abo-pilot
 ```
 
-- Der User moechte vorerst lokal weiterarbeiten.
-- Aktueller Worktree ist dirty. Zuletzt aktiv bearbeitet: `app.js`, `index.html`, `styles.css`, `analysis-server.js`, `README.md`, `DEPLOYMENT.md`, Docker/Nginx-Dateien und `CHAT_HANDOFF.md`.
+- Remote:
+
+```text
+origin https://github.com/danielkupper1-oss/abo-pilot.git
+```
+
+- Hostinger-Deployment wurde durchgefuehrt, Details siehe Abschnitt `Update 2026-05-29: GitHub, Hostinger, DNS`.
+- Lokaler Worktree war nach dem Deployment sauber; diese Handoff-Datei wurde danach fuer den aktuellen Stand erneut angepasst.
+
+## Update 2026-05-29: GitHub, Hostinger, DNS
+
+### GitHub
+
+- Repository erstellt:
+
+```text
+https://github.com/danielkupper1-oss/abo-pilot
+```
+
+- `main` ist auf GitHub.
+- Letzter gepushter Commit:
+
+```text
+01a13a0 Expose analysis health through API path
+```
+
+- Vor dem Push waren diese Checks erfolgreich:
+
+```bash
+node --check app.js
+node --check analysis-server.js
+```
+
+### Hostinger VPS
+
+- SSH-Ziel, das erfolgreich verwendet wurde:
+
+```bash
+ssh -i ~/.ssh/theater_planner_hostinger root@187.127.83.128
+```
+
+- Server-Hostname:
+
+```text
+srv1702245
+```
+
+- Docker ist installiert und laeuft.
+- Abo Pilot wurde unter folgendem Pfad geklont:
+
+```text
+/home/deploy/apps/abo-pilot
+```
+
+- Deployment-Befehl auf dem VPS:
+
+```bash
+cd /home/deploy/apps/abo-pilot
+sudo -u deploy git pull --ff-only
+sudo -u deploy docker compose up -d --build
+```
+
+- Laufende Abo-Pilot-Container:
+
+```text
+abo-pilot
+abo-pilot-analysis
+```
+
+- Abo Pilot ist serverlokal erreichbar:
+
+```text
+http://127.0.0.1:8080/
+http://127.0.0.1:8080/api/health
+http://127.0.0.1:8080/api/analyze
+```
+
+- Gepruefte Server-Antworten:
+  - Frontend: `200 OK`
+  - `/api/health`: `{"ok":true}`
+  - `/api/analyze`: regelbasierte JSON-Antwort
+
+### Caddy / Reverse Proxy
+
+- Auf dem VPS laeuft bereits Theater Planner mit Caddy.
+- Caddy-Projektpfad:
+
+```text
+/home/deploy/apps/theater-planner
+```
+
+- Wichtige Dateien:
+
+```text
+/home/deploy/apps/theater-planner/compose.yml
+/home/deploy/apps/theater-planner/Caddyfile
+```
+
+- Caddy ist mit dem Docker-Netzwerk von Abo Pilot verbunden:
+
+```text
+abo-pilot_default
+```
+
+- Aktuelle Routing-Idee:
+  - `abo.runningdanny.ch` soll zu Abo Pilot gehen.
+  - Theater Planner bleibt vorerst nicht auf `runningdanny.ch`; er bekommt spaeter eine eigene Domain.
+  - Der bisherige IP-/Fallback-Zugriff fuer Theater Planner soll weiter funktionieren.
+
+- Aktueller Caddyfile-Zielzustand nach Reparatur des IP-Zugriffs:
+
+```caddyfile
+{
+  auto_https disable_redirects
+  default_sni 187.127.83.128
+}
+
+http://abo.runningdanny.ch {
+  redir https://abo.runningdanny.ch{uri} permanent
+}
+
+https://abo.runningdanny.ch {
+  reverse_proxy abo-pilot:80
+}
+
+https://187.127.83.128 {
+  tls internal
+  reverse_proxy app:3000
+}
+
+:80 {
+  reverse_proxy app:3000
+}
+```
+
+Wichtig: `https://187.127.83.128` kann wegen internem Zertifikat eine Browser-Warnung zeigen. `http://187.127.83.128` ist fuer den IP-Fallback die unkomplizierte Variante.
+
+### DNS fuer Abo Pilot
+
+- Gewuenschte Subdomain:
+
+```text
+abo.runningdanny.ch
+```
+
+- Hostinger DNS-Zone liefert direkt auf den Hostinger-Nameservern korrekt:
+
+```text
+abo.runningdanny.ch. 14400 IN A 187.127.83.128
+```
+
+- Nameserver laut User:
+
+```text
+horizon.dns-parking.com
+orbit.dns-parking.com
+```
+
+- Oeffentliche Resolver bzw. `.ch`-Registry sahen die Domain zeitweise noch als `NXDOMAIN`.
+- Schlussfolgerung: Hostinger-Zone ist eingetragen, aber Registry-/DNS-Propagation war noch nicht weltweit sichtbar.
+- TTL wurde von Hostinger auf Standard `14400` gesetzt. Es kann mehrere Stunden dauern.
+
+- Optionaler IPv6-Eintrag, falls in Hostinger gewuenscht:
+
+```text
+AAAA abo 2a02:4780:79:6bb7::1
+```
+
+### Traefik-Hinweis
+
+- Hostinger bot an, Traefik bereitzustellen.
+- Nicht aktivieren, solange Caddy bereits Reverse Proxy fuer Theater Planner und Abo Pilot ist.
+- Traefik wuerde ebenfalls Ports `80`/`443` beanspruchen und koennte die bestehende Caddy-Konfiguration stoeren.
+
+### Wichtige Falle aus diesem Chat
+
+- Nach Aktivierung von Port `443` fuer Caddy war `https://187.127.83.128` fuer Theater Planner zunaechst kaputt.
+- Grund: Caddy hatte nur eine HTTPS-Route fuer `abo.runningdanny.ch`, aber keinen sinnvollen HTTPS-Fallback fuer IP-Zugriff.
+- Reparatur:
+  - `default_sni 187.127.83.128`
+  - `https://187.127.83.128 { tls internal; reverse_proxy app:3000 }`
+  - `auto_https disable_redirects`, damit `http://187.127.83.128` nicht automatisch auf HTTPS gezwungen wird.
+
+### Naechste Pruefung
+
+Wenn DNS sichtbar ist, pruefen:
+
+```bash
+dig abo.runningdanny.ch A
+curl -I http://abo.runningdanny.ch
+curl -k -I https://abo.runningdanny.ch
+```
+
+Erwartung:
+
+- `http://abo.runningdanny.ch` redirectet auf HTTPS.
+- `https://abo.runningdanny.ch` zeigt Abo Pilot.
+- Caddy holt automatisch ein Let's-Encrypt-Zertifikat.
 
 ## Navigationsstruktur
 
@@ -95,16 +291,37 @@ Wichtig: Policen und Handy-Vertraege sollen **nicht** mehr unter `Abos` erschein
   - PDF-Dokumente
 - Bei normalen Abos erscheint `Bis-/Enddatum`, sobald der Status auf `Gekuendigt` gesetzt wird.
 - Bei Policen gibt es zusaetzlich `Keine Erneuerung / einmalige Police`.
-- Einmalige Policen haben `Von/Bis`, keine Erneuerung und erscheinen nicht in Kuendigungsagenda/Erneuerungskalender.
+- Einmalige Policen haben ein eigenes Intervall `Einmalig` (`once`), `Von/Bis`, keine Erneuerung und erscheinen nicht in Kuendigungsagenda/Erneuerungskalender.
+- Einmalige Policen werden nicht in laufende Monats-/Jahreskosten eingerechnet.
+- In der Detailansicht steht bei einmaligen Policen `Total` statt `Monatlich`; laufende Monatskosten bleiben `CHF 0.00`.
+- CSS Reiseversicherung wurde als Spezialfall normalisiert:
+  - 30-Tage-Reiseversicherung
+  - Start `27.05.2026`
+  - Bis `25.06.2026`
+  - Intervall `Einmalig`
+  - keine Erneuerung
+  - keine Kuendigungsfrist
+  - Betrag soll nur die echte Praemie/Totalrechnung sein, nicht eine Versicherungssumme.
 - PDF-Upload pro Abo/Police:
   - `<input type="file" accept="application/pdf,.pdf" multiple>`
   - PDFs werden im statischen MVP lokal im Browser gespeichert.
   - Limit aktuell: 1.5 MB pro PDF, damit `localStorage` nicht sofort volllaeuft.
   - Detailansicht zeigt PDF-Liste mit Download-Link.
+  - PDFs koennen direkt in der Detailansicht mit `PDF hinzufügen` hochgeladen werden, ohne den Eintrag zu bearbeiten.
+  - `PDF hinzufügen` nutzt einen direkt eingebetteten Datei-Input, damit keine mehrfach verwendete Input-ID auf einen unsichtbaren Bereich zeigt.
+  - Im Dokumentbereich wird ein PDF-Zaehler angezeigt, z. B. `Keine PDFs` oder `1 PDF`.
+  - Wenn `localStorage` voll ist, wird der Upload zurueckgerollt und es erscheint eine Speichermeldung statt einer falschen Erfolgsmeldung.
 - PDF-Auslesen:
   - Button `PDF auslesen` ist in den Detailansichten verdrahtet.
   - Fuer echtes Auslesen muss der Analyse-Service unter `/api/analyze-document` laufen.
   - Wenn nur der statische Server laeuft, zeigt die App eine verstaendliche Fehlermeldung statt scheinbar nichts zu tun.
+  - Die regelbasierte PDF-Auswertung wurde nach einem CSS-Reiseversicherungs-Test vorsichtiger gemacht:
+    - bekannte Anbieter wie CSS/AXA/Zurich werden sauberer erkannt.
+    - Versicherungssummen/Deckungen wie `CHF 5'000.00` werden nicht mehr als Prämie/Kosten übernommen.
+    - Notfall-Rubriken werden nicht mehr als Anbieter interpretiert.
+  - PDFs koennen in der Detailansicht jetzt einzeln mit `PDF löschen` entfernt werden.
+  - Das Loeschen nutzt den bestehenden Sicherheitsdialog und entfernt das PDF aus `localStorage`.
+  - Nach Loeschen eines PDFs wird eine bestehende PDF-Auswertung fuer den Eintrag zurueckgesetzt.
 - Anbieter-Vorauswahl mit Logos fuer bekannte Anbieter, u. a.:
   Netflix, Spotify Family, NZZ Digital, Swisscom Mobile, Sunrise Mobile, Apple iCloud+, Microsoft 365 Family, Disney+, Adobe, Hostinger, Apple TV+, AXA.
 - PIN/PUK werden maskiert angezeigt.
@@ -290,6 +507,215 @@ Fuer echte SaaS-Nutzung braucht es spaeter:
 - Zahlungsintegration
 - rechtliche Seiten
 - Backups und Monitoring
+
+## Runningdanny.ch Coming-Soon-Seite
+
+- Fuer die Hauptdomain `runningdanny.ch` wurde eine eigene statische Coming-Soon-Seite gebaut.
+- Lokaler Projektpfad:
+
+```text
+/private/tmp/runningdanny-site
+```
+
+- Lokale Vorschau laeuft auf:
+
+```text
+http://localhost:8090
+```
+
+- Designrichtung: dunkle Pixel-/HUD-Startseite im Stil des akzeptierten Konzeptbilds:
+  - grosser Pixel-Titel `runningdanny.ch`
+  - Slogan `Apps fuer Ablaeufe, die Standardsoftware vergisst.`
+  - `// Agent Dispatch` Szene mit Pixel-Runner, City, Road und Route
+  - `// Mission Control` mit Abo Pilot, Theater Planner, DNS und Main site
+  - `// System Log` und `// Info`
+- Mobile QA wurde per Screenshot geprueft; horizontales Ueberlaufen wurde behoben.
+- Hostinger Deployment:
+
+```text
+/home/deploy/apps/runningdanny-site
+```
+
+- Docker-Container:
+
+```text
+runningdanny-site
+```
+
+- Interne Hostinger-Pruefung erfolgreich:
+
+```text
+http://127.0.0.1:8090 -> HTTP 200
+Host: runningdanny.ch via Caddy -> liefert runningdanny.ch HTML
+```
+
+## Update 2026-05-29: letzte Abo-Pilot-App-Aenderungen
+
+- Frontend wurde mehrfach mit Cache-Busting ausgeliefert; aktuell:
+
+```text
+app.js?v=20260529-6
+styles.css?v=20260529-6
+```
+
+- Hostinger-Deployment wurde nach den letzten Aenderungen erneut gebaut:
+
+```bash
+cd /home/deploy/apps/abo-pilot
+sudo -u deploy docker compose up -d --build abo-pilot abo-pilot-analysis
+```
+
+- Geprueft:
+
+```text
+http://127.0.0.1:8080/ -> HTTP 200
+http://127.0.0.1:8080/api/health -> {"ok":true}
+```
+
+- Wichtige UX-Hinweise:
+  - Nach Deployments im Browser hart neu laden: `Cmd + Shift + R`.
+  - Der grosse Button `Löschen` unten loescht den ganzen Eintrag.
+  - `PDF löschen` loescht nur das einzelne PDF und sitzt direkt in der PDF-Zeile neben `PDF auslesen`.
+  - `PDF hinzufügen` sitzt im Dokumentbereich der Detailansicht.
+
+## Update 2026-05-29: E-Mail-Empfang und Versand
+
+- E-Mail-Empfang bei Hostinger wurde geprueft:
+  - `runningdanny.ch` hat oeffentlich sichtbare MX-Eintraege:
+    - `mx1.hostinger.com`
+    - `mx2.hostinger.com`
+  - Die Google-Fehlermeldung `DNS type 'mx' lookup of runningdanny ... NXDOMAIN` lag an einer falsch geschriebenen Empfaengeradresse ohne `.ch`.
+  - Mit vollstaendiger Adresse `...@runningdanny.ch` hat der Empfang funktioniert.
+
+- E-Mail-Versand aus Abo Pilot wurde vorbereitet:
+  - Neuer API-Endpunkt im Analyse-Service: `POST /api/send-cancellation`
+  - Neuer Status-Endpunkt: `GET /api/mail/status`
+  - Frontend-Detailansicht hat einen Button `Kündigung per E-Mail senden`.
+  - Der Button nutzt die hinterlegte `Anbieter-E-Mail` (`supportEmail`) und sendet einen einfachen Kuendigungstext.
+  - Vor dem Versand erscheint ein Browser-Confirm.
+  - Ohne SMTP-Konfiguration antwortet der Service klar mit `503` und Hinweis auf fehlende Variablen.
+
+- Neue/benoetigte SMTP-Umgebungsvariablen fuer den VPS:
+
+```env
+SMTP_HOST=smtp.hostinger.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=hello@runningdanny.ch
+SMTP_PASS=dein-mailbox-passwort
+MAIL_FROM=hello@runningdanny.ch
+MAIL_REPLY_TO=hello@runningdanny.ch
+```
+
+- `analysis-package.json` enthaelt neu `nodemailer`.
+- Lokal geprueft:
+
+```bash
+node --check app.js
+node --check analysis-server.js
+```
+
+- Lokaler API-Test auf Port `8799`:
+
+```text
+GET /api/mail/status -> {"configured":false,"host":"smtp.hostinger.com","port":465,"secure":true,"from":""}
+POST /api/send-cancellation ohne SMTP-Daten -> HTTP 503 mit erklaerender JSON-Meldung
+```
+
+## Offene technische Schuld
+
+- Dokumente liegen weiter als Data-URLs im `localStorage`.
+- Fuer echte Nutzung braucht es weiterhin echten Datei-Storage und ein Backend.
+- Das PDF-Auslesen ist im statischen MVP nur heuristisch/optional mit Analyse-Service; Ergebnisse muessen vor `In Eintrag übernehmen` kontrolliert werden.
+- E-Mail-Versand braucht noch echte SMTP-Secrets auf dem VPS und danach einen echten Versandtest an eine sichere Testadresse.
+
+## Update 2026-05-29: Ollama auf Hostinger aktiviert
+
+- Ollama wurde auf dem Hostinger-VPS fuer Abo Pilot gestartet:
+
+```bash
+cd /home/deploy/apps/abo-pilot
+sudo -u deploy docker compose --profile ai up -d ollama
+```
+
+- Das Modell wurde in den Ollama-Container geladen:
+
+```bash
+docker compose exec -T ollama ollama pull qwen2.5:3b
+```
+
+- Der Analyse-Service fiel zuerst weiter auf `fallback` zurueck, weil `ANALYSIS_TIMEOUT_MS` in `docker-compose.yml` fest auf `20000` stand und die CPU-Inferenz knapp laenger braucht.
+- Fix auf dem VPS und lokal:
+
+```yaml
+ANALYSIS_TIMEOUT_MS: "${ANALYSIS_TIMEOUT_MS:-60000}"
+```
+
+- In `/home/deploy/apps/abo-pilot/.env` steht nun:
+
+```env
+ANALYSIS_TIMEOUT_MS=60000
+```
+
+- Danach wurde `abo-pilot-analysis` neu gebaut/gestartet.
+- Erfolgreicher Test:
+
+```text
+POST http://127.0.0.1:8080/api/analyze
+-> "source":"ollama"
+-> "model":"qwen2.5:3b"
+```
+
+- Laufende Container:
+
+```text
+abo-pilot
+abo-pilot-analysis
+abo-pilot-ollama
+```
+
+- Ressourcennotiz nach Aktivierung:
+  - Ollama nutzt im Leerlauf ca. `2.2 GiB` RAM.
+  - Root-Dateisystem: ca. `32G` belegt, `65G` frei.
+  - Docker-Volumes enthalten ca. `1.93G` fuer das Modell.
+  - Docker-Build-Cache ist weiterhin gross, ca. `16G`, bei Bedarf spaeter bereinigen.
+
+## Update 2026-05-29: Ollama wieder deaktiviert
+
+- Entscheidung: Fuer den aktuellen MVP wird auf Ollama verzichtet, weil Serverplatz und RAM fuer Theater Planner und weitere Projekte wichtiger sind.
+- Ollama wurde auf dem VPS wieder entfernt:
+  - Container `abo-pilot-ollama` gestoppt und entfernt.
+  - Volume `abo-pilot_ollama-models` entfernt.
+  - Image `ollama/ollama:latest` entfernt.
+- `docker-compose.yml` wurde wieder auf normalen Betrieb ohne Ollama-Service reduziert.
+- Neuer Schutz im Analyse-Service:
+
+```env
+ENABLE_OLLAMA=false
+```
+
+- `analysis-server.js` fragt Ollama nur noch ab, wenn `ENABLE_OLLAMA=true` gesetzt ist.
+- Dadurch wartet `/api/analyze` nicht mehr auf einen fehlenden Ollama-Host.
+- Erfolgreicher Test nach Rueckbau:
+
+```text
+POST http://127.0.0.1:8080/api/analyze
+-> "source":"fallback"
+-> "model":null
+-> Antwortzeit ca. 0.045s
+```
+
+- Laufende Abo-Pilot-Container nach Rueckbau:
+
+```text
+abo-pilot
+abo-pilot-analysis
+```
+
+- Serverressourcen nach Rueckbau:
+  - Root-Dateisystem: ca. `20G` belegt, `77G` frei.
+  - RAM verfuegbar: ca. `6.5GiB`.
+  - Kein Ollama-Image und kein Ollama-Volume mehr vorhanden.
 
 ## Sinnvolle naechste Schritte
 

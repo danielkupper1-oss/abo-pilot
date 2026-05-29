@@ -1,6 +1,6 @@
 # Deployment auf Hostinger VPS
 
-Diese Version von Abo Pilot besteht aus einem statischen Frontend, einem kleinen internen Analyse-Service und optional Ollama. Fuer den MVP liefert die Analyse auch ohne Ollama regelbasierte Ergebnisse.
+Diese Version von Abo Pilot besteht aus einem statischen Frontend und einem kleinen internen Analyse-Service. Fuer den MVP liefert die Analyse regelbasierte Ergebnisse.
 
 ## Voraussetzungen
 
@@ -27,36 +27,44 @@ docker compose up -d --build
 
 Die App laeuft danach lokal auf dem Server unter `http://127.0.0.1:8080`. Die interne Analyse-API ist nur ueber Nginx unter `/api/analyze` und `/api/analyze-document` erreichbar.
 
+## Zugriffsschutz
+
+Fuer oeffentlich erreichbare Deployments sollte Basic Auth aktiviert werden. Dazu in der `.env` neben `docker-compose.yml` setzen:
+
+```env
+ABO_BASIC_AUTH_USER=abo
+ABO_BASIC_AUTH_PASSWORD=ein-langes-zufaelliges-passwort
+```
+
+Danach den Frontend-Container neu bauen/starten:
+
+```bash
+docker compose up -d --build abo-pilot
+```
+
+## E-Mail-Versand
+
+Der Analyse-Service stellt zusaetzlich `/api/send-cancellation` fuer Kuendigungs-E-Mails bereit. Fuer Hostinger-Mail muessen die SMTP-Zugangsdaten als Umgebungsvariablen gesetzt werden, z. B. in einer `.env` neben `docker-compose.yml` auf dem VPS:
+
+```env
+SMTP_HOST=smtp.hostinger.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=hello@runningdanny.ch
+SMTP_PASS=dein-mailbox-passwort
+MAIL_FROM=hello@runningdanny.ch
+MAIL_REPLY_TO=hello@runningdanny.ch
+```
+
+Danach den Analyse-Container neu bauen/starten:
+
+```bash
+sudo -u deploy docker compose up -d --build abo-pilot-analysis abo-pilot
+```
+
+Der Status ist intern ueber `/api/mail/status` sichtbar; Passwoerter werden dort nicht ausgegeben.
+
 Vor dem ersten Push und Deployment siehe auch [docs/GITHUB_DEPLOYMENT_CHECKLIST.md](docs/GITHUB_DEPLOYMENT_CHECKLIST.md).
-
-## Ollama optional aktivieren
-
-Auf Hostinger KVM 2 laeuft Ollama CPU-basiert und sollte mit einem kleinen Modell starten. Der Ollama-Container ist deshalb hinter dem Compose-Profil `ai` versteckt:
-
-```bash
-docker compose --profile ai up -d --build
-docker compose exec ollama ollama pull qwen2.5:3b
-```
-
-Der Analyse-Service verwendet standardmaessig:
-
-```text
-OLLAMA_BASE_URL=http://ollama:11434
-OLLAMA_MODEL=qwen2.5:3b
-ANALYSIS_TIMEOUT_MS=20000
-```
-
-Wichtig fuer den VPS:
-
-- Ollama nicht direkt per Public Port veroeffentlichen.
-- Bei KVM 2 keine grossen 7B/13B-Modelle als Dauerlast einplanen.
-- Wenn Theater Kalender und Newsletter ebenfalls laufen, nur kleine Modelle und kurze Analysen nutzen.
-- Digitale PDFs werden per Text-Extraktion verarbeitet. Gescannte Bild-PDFs brauchen spaeter OCR und sollten auf KVM 2 nur optional laufen.
-- Falls der Server unter Last kommt, Ollama-Container stoppen und die regelbasierte Analyse weiterverwenden:
-
-```bash
-docker compose stop ollama
-```
 
 ## Nginx Reverse Proxy
 

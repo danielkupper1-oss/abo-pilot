@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Abo Pilot</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260529-12" />
   </head>
   <body>
     <div class="app">
@@ -105,9 +105,13 @@
             <option>Alle Kategorien</option>
             <option>Handy Familie</option>
             <option>Zeitung</option>
+            <option>Magazin</option>
+            <option>Online-Abo</option>
             <option>Streaming</option>
             <option>Software</option>
+            <option>Cloud</option>
             <option>Police</option>
+            <option>Sonstiges</option>
           </select>
           <a class="button high-contrast" href="#subscriptions" data-route="subscriptions" id="addSubscription">
             <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
@@ -239,6 +243,7 @@
                     <option value="monthly">Monatlich</option>
                     <option value="quarterly">Quartalsweise</option>
                     <option value="yearly">Jährlich</option>
+                    <option value="once">Einmalig</option>
                   </select>
                 </label>
               </fieldset>
@@ -523,6 +528,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js"></script>
+    <script src="app.js?v=20260529-12"></script>
   </body>
 </html>

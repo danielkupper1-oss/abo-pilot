@@ -2,9 +2,19 @@ const http = require("http");
 
 const port = Number(process.env.PORT || 8787);
 const host = process.env.HOST || "0.0.0.0";
+const ollamaEnabled = process.env.ENABLE_OLLAMA === "true";
 const ollamaBaseUrl = (process.env.OLLAMA_BASE_URL || "http://ollama:11434").replace(/\/$/, "");
 const ollamaModel = process.env.OLLAMA_MODEL || "qwen2.5:3b";
 const requestTimeoutMs = Number(process.env.ANALYSIS_TIMEOUT_MS || 20000);
+const smtpConfig = {
+  host: process.env.SMTP_HOST || "smtp.hostinger.com",
+  port: Number(process.env.SMTP_PORT || 465),
+  secure: String(process.env.SMTP_SECURE || "true") !== "false",
+  user: process.env.SMTP_USER || "",
+  pass: process.env.SMTP_PASS || "",
+  from: process.env.MAIL_FROM || process.env.SMTP_USER || "",
+  replyTo: process.env.MAIL_REPLY_TO || process.env.SMTP_USER || "",
+};
 
 function sendJson(response, statusCode, payload) {
   const body = JSON.stringify(payload);
@@ -38,6 +48,7 @@ function readJson(request) {
 
 function monthlyCost(item) {
   const amount = Number(item.amount || 0);
+  if (item.noRenewal || item.interval === "once") return 0;
   if (item.interval === "yearly") return amount / 12;
   if (item.interval === "quarterly") return amount / 3;
   return amount;
@@ -117,24 +128,49 @@ function textValueAfterLabel(text, labels) {
   return "";
 }
 
+function knownProviderFrom(text, currentSubscription = {}) {
+  const haystack = `${currentSubscription.name || ""}\n${text || ""}`;
+  const providers = [
+    ["CSS", /\bCSS\b|CSS Versicherung|CSS Krankenversicherung|CSS Reiseversicherung/i],
+    ["AXA", /\bAXA\b/i],
+    ["Zurich", /\bZurich\b/i],
+    ["Swisscom", /\bSwisscom\b/i],
+    ["Sunrise", /\bSunrise\b/i],
+    ["yallo", /\byallo\b/i],
+    ["Hostinger", /\bHostinger\b/i],
+  ];
+  return providers.find(([, pattern]) => pattern.test(haystack))?.[0] || "";
+}
+
 function cleanIdentifier(value) {
   return String(value || "")
-    .split(/\b(?:Jahresprämie|Jahrespraemie|Prämie|Praemie|Versicherungsbeginn|Beginn|Ablauf|Kündigung|Kuendigung|CHF|Fr\.?)\b/i)[0]
+    .split(/\b(?:Jahresprämie|Jahrespraemie|Prämie|Praemie|Versicherungsbeginn|Beginn|Ablauf|Kündigung|Kuendigung|Seite|Page|CHF|Fr\.?)\b/i)[0]
     .trim()
     .replace(/[.,;:]$/, "");
 }
 
+function amountFromPremiumContext(text) {
+  const candidates = [
+    /\b(?:Jahresprämie|Jahrespraemie|Gesamtprämie|Gesamtpraemie|Prämie|Praemie|Bruttoprämie|Bruttopraemie|Nettoprämie|Nettopraemie)\D{0,80}(?:CHF|Fr\.?)?\s*([\d'.,]+)\b/i,
+    /\b(?:Rechnungsbetrag|Rechnungstotal|Totalbetrag|Zu bezahlen|Zahlbetrag)\D{0,80}(?:CHF|Fr\.?)?\s*([\d'.,]+)\b/i,
+  ];
+  for (const pattern of candidates) {
+    const value = text.match(pattern)?.[1];
+    const amount = parseAmount(value);
+    if (Number.isFinite(amount)) return amount;
+  }
+  return null;
+}
+
 function fallbackDocumentFields(text, currentSubscription = {}) {
   const compact = text.replace(/\r/g, "\n").replace(/[ \t]+/g, " ");
+  const knownProvider = knownProviderFrom(compact, currentSubscription);
   const policyNumber = cleanIdentifier(
     textValueAfterLabel(compact, ["Policen(?:nummer)?", "Police Nr\\.?","Vertragsnummer", "Kundennummer"]) ||
       compact.match(/\b(?:Police|Policennummer|Vertrag|Vertragsnummer)\D{0,24}([A-Z0-9][A-Z0-9 .\\/-]{4,50})/i)?.[1]?.trim() ||
       ""
   );
-  const amountText =
-    compact.match(/\b(?:Prämie|Praemie|Jahresprämie|Jahrespraemie|Betrag|Total)\D{0,40}(?:CHF|Fr\.?)?\s*([\d'.,]+)\b/i)?.[1] ||
-    compact.match(/\b(?:CHF|Fr\.?)\s*([\d'.,]+)\b/i)?.[1] ||
-    "";
+  const amount = amountFromPremiumContext(compact);
   const startDate =
     normalizeDate(textValueAfterLabel(compact, ["Beginn", "Vertragsbeginn", "Versicherungsbeginn", "Gueltig ab", "Gültig ab"])) ||
     normalizeDate(compact.match(/\b(?:ab|Beginn)\D{0,20}(\d{1,2}[./-]\d{1,2}[./-]\d{4})/i)?.[1]);
@@ -153,18 +189,20 @@ function fallbackDocumentFields(text, currentSubscription = {}) {
         : null;
 
   return {
-    provider: textValueAfterLabel(compact, ["Versicherer", "Anbieter", "Gesellschaft"]) || "",
+    provider: knownProvider || textValueAfterLabel(compact, ["Versicherer", "Anbieter", "Gesellschaft"]) || "",
     name: currentSubscription.name || textValueAfterLabel(compact, ["Produkt", "Versicherung", "Police"]) || "",
     category: currentSubscription.category || "Police",
     policyNumber,
-    amount: parseAmount(amountText),
-    interval: /monatlich|pro monat/i.test(compact) ? "monthly" : "yearly",
+    amount,
+    interval: /einmalig|einmalige|30\s*Tage|Reiseversicherung/i.test(compact) ? "once" : /monatlich|pro monat/i.test(compact) ? "monthly" : "yearly",
     startDate,
     renewalDate,
     noticeDays,
     supportEmail: compact.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "",
     address: textValueAfterLabel(compact, ["Kontakt", "Adresse"]) || "",
-    summary: "Automatisch aus dem PDF-Text abgeleitete Felder. Bitte vor dem Übernehmen prüfen.",
+    summary: amount
+      ? "Automatisch aus dem PDF-Text abgeleitete Felder. Bitte vor dem Übernehmen prüfen."
+      : "Automatisch aus dem PDF-Text abgeleitete Felder. Keine eindeutige Prämie erkannt; Beträge wie Versicherungssummen wurden bewusst nicht übernommen.",
     confidence: "mittel",
   };
 }
@@ -178,7 +216,7 @@ function sanitizeSubscription(item) {
     startDate: item.startDate,
     renewalDate: item.renewalDate,
     endDate: item.endDate,
-    noRenewal: Boolean(item.noRenewal),
+    noRenewal: Boolean(item.noRenewal || item.interval === "once"),
     noticeDays: Number(item.noticeDays || 0),
     status: item.status,
     tags: Array.isArray(item.tags) ? item.tags.map((tag) => String(tag).slice(0, 40)).slice(0, 8) : [],
@@ -188,6 +226,90 @@ function sanitizeSubscription(item) {
     hasDocuments: Boolean(item.documents?.length),
     notes: String(item.notes || "").slice(0, 500),
   };
+}
+
+function mailConfigured() {
+  return Boolean(smtpConfig.host && smtpConfig.port && smtpConfig.user && smtpConfig.pass && smtpConfig.from);
+}
+
+function sanitizeEmail(value) {
+  const email = String(value || "").trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "";
+  return email.slice(0, 180);
+}
+
+function sanitizeMailText(value, maxLength = 5000) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .slice(0, maxLength)
+    .trim();
+}
+
+async function sendMail({ to, subject, text }) {
+  let nodemailer;
+  try {
+    nodemailer = require("nodemailer");
+  } catch (error) {
+    throw new Error("Mail-Bibliothek ist nicht installiert. Bitte Analyse-Container neu bauen.");
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: smtpConfig.host,
+    port: smtpConfig.port,
+    secure: smtpConfig.secure,
+    auth: {
+      user: smtpConfig.user,
+      pass: smtpConfig.pass,
+    },
+  });
+
+  return transporter.sendMail({
+    from: smtpConfig.from,
+    replyTo: smtpConfig.replyTo || undefined,
+    to,
+    subject,
+    text,
+  });
+}
+
+async function handleSendCancellation(request, response) {
+  try {
+    if (!mailConfigured()) {
+      sendJson(response, 503, {
+        error: "E-Mail-Versand ist noch nicht konfiguriert.",
+        detail: "Bitte SMTP_USER, SMTP_PASS und MAIL_FROM im Deployment setzen.",
+      });
+      return;
+    }
+
+    const payload = await readJson(request);
+    const to = sanitizeEmail(payload.to);
+    const subject = sanitizeMailText(payload.subject, 180);
+    const text = sanitizeMailText(payload.text);
+
+    if (!to) {
+      sendJson(response, 422, { error: "Empfänger-E-Mail fehlt oder ist ungültig." });
+      return;
+    }
+    if (!subject || !text) {
+      sendJson(response, 422, { error: "Betreff und Nachricht dürfen nicht leer sein." });
+      return;
+    }
+
+    const result = await sendMail({ to, subject, text });
+    sendJson(response, 200, {
+      ok: true,
+      messageId: result.messageId || "",
+      accepted: result.accepted || [],
+      rejected: result.rejected || [],
+    });
+  } catch (error) {
+    sendJson(response, 502, {
+      error: "E-Mail konnte nicht gesendet werden.",
+      detail: error.message,
+    });
+  }
 }
 
 function buildRuleAnalysis(items) {
@@ -333,11 +455,11 @@ function normalizeExtractedFields(fields, fallback) {
     category: allowedCategories.has(category) ? category : fallback.category || "Police",
     policyNumber: String(fields.policyNumber || fields.contractNumber || fallback.policyNumber || "").slice(0, 120),
     amount: parseAmount(fields.amount) ?? fallback.amount,
-    interval: ["monthly", "quarterly", "yearly"].includes(fields.interval) ? fields.interval : fallback.interval || "yearly",
+    interval: ["monthly", "quarterly", "yearly", "once"].includes(fields.interval) ? fields.interval : fallback.interval || "yearly",
     startDate: normalizeDate(fields.startDate) || fallback.startDate || "",
     renewalDate: normalizeDate(fields.renewalDate) || fallback.renewalDate || "",
     endDate: normalizeDate(fields.endDate) || fallback.endDate || "",
-    noRenewal: Boolean(fields.noRenewal || fallback.noRenewal),
+    noRenewal: Boolean(fields.noRenewal || fallback.noRenewal || fields.interval === "once" || fallback.interval === "once"),
     noticeDays: Number.isFinite(Number(fields.noticeDays)) ? Number(fields.noticeDays) : fallback.noticeDays,
     supportEmail: String(fields.supportEmail || fallback.supportEmail || "").slice(0, 160),
     address: String(fields.address || fallback.address || "").slice(0, 240),
@@ -356,7 +478,10 @@ async function askOllamaForDocument(text, fallbackFields, currentSubscription) {
     "Du extrahierst Daten aus einem Schweizer Vertrags- oder Policen-PDF fuer Abo Pilot.",
     "Antworte ausschliesslich als valides JSON ohne Markdown.",
     "Erfinde keine Daten. Wenn ein Feld nicht klar im Text steht, verwende null oder leeren String.",
-    "Datumsformat immer YYYY-MM-DD. Intervall: monthly, quarterly oder yearly.",
+    "Datumsformat immer YYYY-MM-DD. Intervall: monthly, quarterly, yearly oder once.",
+    "Verwende interval once und noRenewal true fuer einmalige Policen, z. B. Reiseversicherungen mit begrenzter Laufzeit.",
+    "amount ist nur die effektive Praemie, Rechnungssumme oder Abo-Kosten. Versicherungssummen, Deckungen, Limiten, Notfallbetraege oder Schadensummen duerfen NICHT als amount verwendet werden.",
+    "provider ist der Versicherer/Anbieter, nicht eine Rubrik oder Handlungsanweisung wie Notfallhinweise.",
     "Felder: provider, name, category, policyNumber, amount, interval, startDate, renewalDate, endDate, noRenewal, noticeDays, supportEmail, address, summary, confidence.",
     "",
     "Bestehender App-Eintrag:",
@@ -426,11 +551,15 @@ async function handleAnalyzeDocument(request, response) {
     let source = "rules";
     let extracted = fallbackFields;
 
-    try {
-      const modelFields = await askOllamaForDocument(text, fallbackFields, currentSubscription);
-      extracted = normalizeExtractedFields(modelFields, fallbackFields);
-      source = "ollama";
-    } catch (error) {
+    if (ollamaEnabled) {
+      try {
+        const modelFields = await askOllamaForDocument(text, fallbackFields, currentSubscription);
+        extracted = normalizeExtractedFields(modelFields, fallbackFields);
+        source = "ollama";
+      } catch (error) {
+        extracted = normalizeExtractedFields({}, fallbackFields);
+      }
+    } else {
       extracted = normalizeExtractedFields({}, fallbackFields);
     }
 
@@ -457,11 +586,13 @@ async function handleAnalyze(request, response) {
     let modelSummary = "";
     let modelStatus = "fallback";
 
-    try {
-      modelSummary = await askOllama(ruleAnalysis, items);
-      modelStatus = modelSummary ? "ollama" : "fallback";
-    } catch (error) {
-      modelSummary = "";
+    if (ollamaEnabled) {
+      try {
+        modelSummary = await askOllama(ruleAnalysis, items);
+        modelStatus = modelSummary ? "ollama" : "fallback";
+      } catch (error) {
+        modelSummary = "";
+      }
     }
 
     sendJson(response, 200, {
@@ -491,6 +622,22 @@ const server = http.createServer((request, response) => {
 
   if (request.method === "POST" && request.url === "/api/analyze-document") {
     handleAnalyzeDocument(request, response);
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/api/mail/status") {
+    sendJson(response, 200, {
+      configured: mailConfigured(),
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure,
+      from: smtpConfig.from ? smtpConfig.from.replace(/(^.).*(@.*$)/, "$1***$2") : "",
+    });
+    return;
+  }
+
+  if (request.method === "POST" && request.url === "/api/send-cancellation") {
+    handleSendCancellation(request, response);
     return;
   }
 
