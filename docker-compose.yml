@@ -1,0 +1,7 @@
+services:
+  abo-pilot:
+    build: .
+    container_name: abo-pilot
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
