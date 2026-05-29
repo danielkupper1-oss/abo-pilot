@@ -479,7 +479,7 @@ async function handleAnalyze(request, response) {
 }
 
 const server = http.createServer((request, response) => {
-  if (request.method === "GET" && request.url === "/health") {
+  if (request.method === "GET" && (request.url === "/health" || request.url === "/api/health")) {
     sendJson(response, 200, { ok: true });
     return;
   }
