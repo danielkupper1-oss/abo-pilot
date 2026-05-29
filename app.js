@@ -1035,11 +1035,21 @@ function toggleRenewalFields() {
   }
 }
 
+function formTitleValue() {
+  const nameValue = field("name").value.trim();
+  const providerValue = providerSearch.value.trim();
+  const originalProviderValue = providerSearch.dataset.originalValue || "";
+  if (providerValue && (!nameValue || nameValue === originalProviderValue)) {
+    return providerValue;
+  }
+  return nameValue;
+}
+
 function subscriptionFromForm(id = crypto.randomUUID()) {
   const existing = subscriptions.find((subscription) => subscription.id === id);
   return {
     id,
-    name: field("name").value,
+    name: formTitleValue(),
     category: field("category").value,
     amount: Number(field("amount").value || 0),
     interval: field("interval").value,
@@ -1116,6 +1126,7 @@ async function subscriptionFromFormWithDocuments(id = crypto.randomUUID()) {
 
 function populateForm(subscription) {
   providerSearch.value = subscription.name;
+  providerSearch.dataset.originalValue = subscription.name;
   field("name").value = subscription.name;
   field("category").value = subscription.category;
   field("amount").value = subscription.amount;
@@ -1146,6 +1157,7 @@ function resetEditor() {
   editingId = "";
   form.reset();
   providerSearch.value = "";
+  providerSearch.dataset.originalValue = "";
   commandProviderSearch.value = "";
   field("documentUpload").value = "";
   editorTitle.textContent = "Abo anlegen";
@@ -2307,7 +2319,13 @@ form.addEventListener("submit", async (event) => {
 });
 
 providerSearch.addEventListener("change", () => {
-  applyPresetByName(providerSearch.value);
+  if (!applyPresetByName(providerSearch.value)) {
+    const nameInput = field("name");
+    const originalProviderValue = providerSearch.dataset.originalValue || "";
+    if (!nameInput.value.trim() || nameInput.value.trim() === originalProviderValue) {
+      nameInput.value = providerSearch.value.trim();
+    }
+  }
 });
 
 commandProviderSearch.addEventListener("change", () => {

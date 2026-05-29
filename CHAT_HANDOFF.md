@@ -725,3 +725,128 @@ abo-pilot-analysis
 4. Tags/Status/Fristen als eigene strukturierte Felder ausbauen.
 5. Backend-Architektur definieren.
 6. Danach GitHub-Repo erstellen und deployen.
+
+## Update 2026-05-29: Design, Schutz, GitHub und Hostinger Deployment
+
+### App-Stand
+
+- Design wurde weiter poliert:
+  - Navigationsfarbe ist nun `#9954e8`.
+  - Light- und Dark-Mode wurden darauf abgestimmt.
+  - Dashboard-Karten, Buttons, Formfelder, Sidebar und mobile Navigation wurden optisch verbessert.
+- Dashboard-Kategorie-Dropdown filtert jetzt wirklich:
+  - Kennzahlen
+  - Fristen-Zentrale
+  - Anbieter-Vorlagen
+  - zusammen mit der globalen Suche
+- Fristen-Eintraege routen jetzt zum passenden Detailbereich:
+  - normale Abos -> `#subscriptions`
+  - Handy-Abos -> `#family`
+  - Policen -> `#policies`
+- `CSS Reiseversicherung` ist als einmalige Police normalisiert:
+  - `interval=once`
+  - keine Erneuerung
+  - keine Kuendigungsfrist
+  - Enddatum `2026-06-25`
+- PDF-Dokumente koennen pro Eintrag lokal hinzugefuegt und wieder geloescht werden.
+- Analyse-Service unterstuetzt weiterhin regelbasierte Analyse und optionale PDF-Auswertung.
+- Kuendigungs-E-Mail-Endpunkt ist vorbereitet:
+  - `/api/send-cancellation`
+  - SMTP-Konfiguration per `.env`
+  - ohne SMTP-Secrets liefert der Service kontrolliert `503`.
+
+### Zugriffsschutz
+
+- `abo.runningdanny.ch` ist jetzt per Basic Auth geschuetzt.
+- Schutz sitzt im Abo-Pilot-Nginx-Container, dadurch sind Frontend und `/api/*` geschuetzt.
+- Aktivierung erfolgt ueber `.env` auf dem VPS:
+
+```env
+ABO_BASIC_AUTH_USER=abo
+ABO_BASIC_AUTH_PASSWORD=Sursee-11
+```
+
+- Wichtige Dateien:
+
+```text
+Dockerfile
+nginx.conf
+docker-compose.yml
+docker-entrypoint.d/10-basic-auth.sh
+```
+
+- Passwort aendern:
+
+```bash
+cd /home/deploy/apps/abo-pilot
+nano .env
+sudo -u deploy docker compose up -d --build abo-pilot
+```
+
+### GitHub
+
+- Aktueller gepushter Commit:
+
+```text
+7d2442e Secure Abo Pilot deployment
+```
+
+- Push-Ziel:
+
+```text
+origin main -> https://github.com/danielkupper1-oss/abo-pilot
+```
+
+- Lokaler Worktree war nach Commit/Push sauber.
+- Erfolgreiche lokale Checks vor Deployment:
+
+```bash
+node --check app.js
+node --check analysis-server.js
+```
+
+### Hostinger Deployment
+
+- VPS-Pfad:
+
+```text
+/home/deploy/apps/abo-pilot
+```
+
+- Deployment-Befehl:
+
+```bash
+cd /home/deploy/apps/abo-pilot
+sudo -u deploy git pull --ff-only
+sudo -u deploy docker compose up -d --build abo-pilot abo-pilot-analysis
+```
+
+- Beim Deployment gab es zunaechst lokale Hotfix-Dateien auf dem VPS, die `git pull` blockierten.
+- Diese wurden serverseitig gesichert mit:
+
+```bash
+sudo -u deploy git stash push -u -m "pre-github-deploy-basic-auth-hotfix-2"
+```
+
+- Danach lief der Fast-Forward auf Commit `7d2442e`.
+- Laufende Container nach Deployment:
+
+```text
+abo-pilot
+abo-pilot-analysis
+```
+
+- Smoke-Tests nach Deployment:
+
+```text
+https://abo.runningdanny.ch/ ohne Login -> 401
+https://abo.runningdanny.ch/ mit abo / Sursee-11 -> 200
+https://abo.runningdanny.ch/api/health mit abo / Sursee-11 -> {"ok":true}
+```
+
+### Hinweise fuer naechsten Chat
+
+- `.env` ist bewusst nicht im Git und bleibt nur auf dem VPS.
+- Basic Auth ist ein pragmatischer Schutz fuer den MVP, ersetzt aber spaeter keine echte Auth mit Benutzerkonten, Rollen und serverseitigem Storage.
+- Docker ist lokal auf dem Mac nicht verfuegbar; Container-Builds wurden auf dem VPS getestet.
+- Beim `docker compose up -d --build` meldete `npm audit` fuer den Analyse-Container eine `high severity vulnerability`; noch nicht bereinigt.
