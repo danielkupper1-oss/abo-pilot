@@ -2448,11 +2448,13 @@ function subscriptionRowMarkup(subscription, options = {}) {
     <article class="subscription-row ${selected} ${compact} ${canceled ? "is-canceled" : ""} ${final ? "is-final" : ""} ${archived ? "is-archived" : ""} ${paused ? "is-paused" : ""}" data-id="${subscription.id}" tabindex="0" aria-label="${escapeHtml(subscription.name)} anzeigen">
       <div class="subscription-main">
         <div class="subscription-title">
-          <strong>${escapeHtml(subscription.name)}</strong>
-          <span class="tag">${escapeHtml(subscription.category)}</span>
-          ${archived ? `<span class="status-pill status-archived">Archiviert</span>` : canceled ? `<span class="status-pill ${statusClass(status)}">${displayStatus(status)}</span>` : ""}
-          ${dueSoon ? `<span class="risk">Frist</span>` : ""}
-          ${dataQualityBadges(subscription)}
+          <strong class="subscription-name">${escapeHtml(subscription.name)}</strong>
+          <span class="subscription-badges">
+            <span class="tag">${escapeHtml(subscription.category)}</span>
+            ${archived ? `<span class="status-pill status-archived">Archiviert</span>` : canceled ? `<span class="status-pill ${statusClass(status)}">${displayStatus(status)}</span>` : ""}
+            ${dueSoon ? `<span class="risk">Frist</span>` : ""}
+            ${dataQualityBadges(subscription)}
+          </span>
         </div>
         <div class="subscription-meta">
           <span>${displayStatus(subscription.status)}</span>

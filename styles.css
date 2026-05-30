@@ -1628,16 +1628,27 @@ textarea:focus {
 }
 
 .subscription-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: minmax(16ch, max-content) minmax(0, 1fr);
+  align-items: start;
+  column-gap: 8px;
+  row-gap: 5px;
   min-width: 0;
 }
 
-.subscription-title strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.subscription-name {
+  min-width: 0;
+  max-width: min(30ch, 100%);
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+
+.subscription-badges {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
 }
 
 .subscription-meta {
@@ -2446,6 +2457,14 @@ body.dark .provider-chip {
 
   .subscription-row {
     grid-template-columns: 1fr;
+  }
+
+  .subscription-title {
+    grid-template-columns: 1fr;
+  }
+
+  .subscription-name {
+    max-width: 100%;
   }
 
   .metric-card {
