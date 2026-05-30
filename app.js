@@ -569,6 +569,7 @@ const providerSearch = document.querySelector("#providerSearch");
 const providerList = document.querySelector("#providerList");
 const providerChips = document.querySelector("#providerChips");
 const providerRail = document.querySelector("#providerRail");
+const dashboardFilterSummary = document.querySelector("#dashboardFilterSummary");
 const subscriptionList = document.querySelector("#subscriptionList");
 const canceledActiveSection = document.querySelector("#canceledActiveSection");
 const canceledActiveList = document.querySelector("#canceledActiveList");
@@ -579,6 +580,9 @@ const quickCategory = document.querySelector("#quickCategory");
 const deadlineStatus = document.querySelector("#deadlineStatus");
 const deadlineAgenda = document.querySelector("#deadlineAgenda");
 const renewalCalendar = document.querySelector("#renewalCalendar");
+const reminderStatus = document.querySelector("#reminderStatus");
+const reminderOverview = document.querySelector("#reminderOverview");
+const exportIcsButton = document.querySelector("#exportIcs");
 const familyFields = document.querySelector("#familyFields");
 const saveSubscriptionButton = document.querySelector("#saveSubscription");
 const familyOverview = document.querySelector("#familyOverview");
@@ -588,8 +592,13 @@ const policyDetailSummary = document.querySelector("#policyDetailSummary");
 const archiveOverview = document.querySelector("#archiveOverview");
 const archiveDetailSummary = document.querySelector("#archiveDetailSummary");
 const archiveCount = document.querySelector("#archiveCount");
+const familyFilterBar = document.querySelector("#familyFilterBar");
+const familyMemberSummary = document.querySelector("#familyMemberSummary");
 const securitySummary = document.querySelector("#securitySummary");
 const adminSummary = document.querySelector("#adminSummary");
+const exportBackupButton = document.querySelector("#exportBackup");
+const importBackupButton = document.querySelector("#importBackup");
+const backupImportFile = document.querySelector("#backupImportFile");
 const analysisContent = document.querySelector("#analysisContent");
 const analysisSource = document.querySelector("#analysisSource");
 const toast = document.querySelector("#toast");
@@ -598,12 +607,20 @@ const masterPasswordInput = document.querySelector("#masterPassword");
 const deleteDialog = document.querySelector("#deleteDialog");
 const deleteDialogTitle = document.querySelector("#deleteDialogTitle");
 const deleteDialogText = document.querySelector("#deleteDialogText");
+const importPreviewDialog = document.querySelector("#importPreviewDialog");
+const importPreviewContent = document.querySelector("#importPreviewContent");
+const importPreviewConfirm = document.querySelector("#importPreviewConfirm");
+const importPreviewCancel = document.querySelector("#importPreviewCancel");
 
 let editingId = "";
 let currentRoute = "dashboard";
 let pendingDeleteId = "";
 let pendingDeleteDocumentId = "";
 let pendingSecretRender = null;
+let pendingImportSubscriptions = [];
+let pendingImportSkipped = 0;
+let familyMemberFilter = "Alle";
+const dialogReturnFocus = new WeakMap();
 
 function field(id) {
   return document.querySelector(`#${id}`);
@@ -638,9 +655,230 @@ function formatCurrency(value) {
   }).format(value);
 }
 
+function hasMissingAmount(subscription) {
+  return Number(subscription.amount || 0) <= 0;
+}
+
+function amountLabel(subscription) {
+  return hasMissingAmount(subscription) ? "Betrag fehlt" : formatCurrency(Number(subscription.amount || 0));
+}
+
+function recurringCostLabel(subscription) {
+  return hasMissingAmount(subscription) ? "Betrag fehlt" : formatCurrency(monthlyCost(subscription));
+}
+
+function yearlyCostLabel(subscription) {
+  return hasMissingAmount(subscription) ? "Betrag fehlt" : formatCurrency(monthlyCost(subscription) * 12);
+}
+
+function dataQualityIssues(subscription) {
+  const issues = [];
+  if (hasMissingAmount(subscription)) issues.push("Betrag fehlt");
+  if (!isOneTime(subscription) && !subscription.renewalDate) issues.push("Erneuerung fehlt");
+  if (!subscription.supportEmail && !subscription.address) issues.push("Kontakt fehlt");
+  if (subscription.category === "Handy Familie" && !subscription.contractNumber) issues.push("Vertrag/SIM fehlt");
+  return issues;
+}
+
+function dataQualityBadges(subscription, limit = 2) {
+  const issues = dataQualityIssues(subscription);
+  if (!issues.length) return "";
+  const visible = issues.slice(0, limit);
+  const remaining = issues.length - visible.length;
+  return [
+    ...visible.map((issue) => `<span class="quality-badge">${escapeHtml(issue)}</span>`),
+    remaining > 0 ? `<span class="quality-badge">+${remaining}</span>` : "",
+  ].join("");
+}
+
+function normalizeStatus(status) {
+  if (status === "Gekuendigt") return "Bestaetigt";
+  if (status === "Probeabo") return "Aktiv";
+  return status || "Aktiv";
+}
+
 function formatDate(value) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value));
+}
+
+function dateFromIso(value) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function isoFromDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function sameDate(a, b) {
+  return a && b && isoFromDate(a) === isoFromDate(b);
+}
+
+const pickerMonthLabel = new Intl.DateTimeFormat("de-CH", { month: "long", year: "numeric" });
+
+let activeDateInput = null;
+let activePickerMonth = new Date();
+
+function syncDatePickerTriggers() {
+  document.querySelectorAll(".date-picker-trigger").forEach((button) => {
+    const input = document.querySelector(`#${button.dataset.for}`);
+    button.disabled = Boolean(input?.disabled);
+  });
+}
+
+function closeDatePicker() {
+  document.querySelector("#datePickerPopover")?.classList.remove("is-open");
+  activeDateInput = null;
+}
+
+function positionDatePicker(input) {
+  const picker = document.querySelector("#datePickerPopover");
+  if (!picker || window.matchMedia("(max-width: 760px)").matches) return;
+  const rect = input.getBoundingClientRect();
+  const pickerWidth = 360;
+  picker.style.left = `${Math.min(rect.left, window.innerWidth - pickerWidth - 10)}px`;
+  picker.style.top = `${Math.min(rect.bottom + 8, window.innerHeight - 420)}px`;
+}
+
+function renderDatePicker() {
+  const picker = document.querySelector("#datePickerPopover");
+  if (!picker || !activeDateInput) return;
+  const selected = dateFromIso(activeDateInput.value);
+  const today = new Date();
+  const firstOfMonth = new Date(activePickerMonth.getFullYear(), activePickerMonth.getMonth(), 1);
+  const gridStart = new Date(firstOfMonth);
+  const mondayOffset = (firstOfMonth.getDay() + 6) % 7;
+  gridStart.setDate(firstOfMonth.getDate() - mondayOffset);
+  const days = Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
+  picker.innerHTML = `
+    <div class="date-picker-head">
+      <button class="icon-button" type="button" data-date-picker-action="prev" aria-label="Vorheriger Monat">‹</button>
+      <strong>${pickerMonthLabel.format(activePickerMonth)}</strong>
+      <button class="icon-button" type="button" data-date-picker-action="next" aria-label="Nächster Monat">›</button>
+    </div>
+    <div class="date-picker-weekdays" aria-hidden="true">
+      <span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span>
+    </div>
+    <div class="date-picker-grid">
+      ${days
+        .map((day) => {
+          const iso = isoFromDate(day);
+          const classes = [
+            "date-picker-day",
+            day.getMonth() !== activePickerMonth.getMonth() ? "is-muted" : "",
+            sameDate(day, today) ? "is-today" : "",
+            selected && sameDate(day, selected) ? "is-selected" : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+          return `<button class="${classes}" type="button" data-date-value="${iso}">${day.getDate()}</button>`;
+        })
+        .join("")}
+    </div>
+    <div class="date-picker-actions">
+      <button class="button subtle" type="button" data-date-picker-action="clear">Leeren</button>
+      <button class="button primary" type="button" data-date-picker-action="today">Heute</button>
+    </div>
+  `;
+}
+
+function openDatePicker(input) {
+  if (!input || input.disabled) return;
+  let picker = document.querySelector("#datePickerPopover");
+  if (!picker) {
+    picker = document.createElement("div");
+    picker.id = "datePickerPopover";
+    picker.className = "date-picker-popover";
+    picker.setAttribute("role", "dialog");
+    picker.setAttribute("aria-label", "Datum wählen");
+  }
+  const pickerHost = editorDialog.open ? editorDialog : document.body;
+  if (picker.parentNode !== pickerHost) {
+    pickerHost.append(picker);
+  }
+  activeDateInput = input;
+  activePickerMonth = dateFromIso(input.value) || new Date();
+  positionDatePicker(input);
+  renderDatePicker();
+  picker.classList.add("is-open");
+}
+
+function setDateInputValue(input, value) {
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function initDatePickers() {
+  document.querySelectorAll('#subscriptionForm input[type="date"]').forEach((input) => {
+    if (input.dataset.datePickerEnhanced) return;
+    input.dataset.datePickerEnhanced = "true";
+    input.type = "text";
+    input.inputMode = "none";
+    input.readOnly = true;
+    input.placeholder = "YYYY-MM-DD";
+    input.setAttribute("aria-haspopup", "dialog");
+    const shell = document.createElement("span");
+    shell.className = "date-input-shell";
+    input.parentNode.insertBefore(shell, input);
+    shell.append(input);
+    const trigger = document.createElement("button");
+    trigger.className = "date-picker-trigger";
+    trigger.type = "button";
+    trigger.dataset.for = input.id;
+    trigger.textContent = "Kalender";
+    trigger.addEventListener("click", () => openDatePicker(input));
+    shell.append(trigger);
+    input.addEventListener("focus", () => openDatePicker(input));
+    input.addEventListener("click", () => openDatePicker(input));
+  });
+
+  document.addEventListener("click", (event) => {
+    const picker = document.querySelector("#datePickerPopover");
+    if (!picker?.classList.contains("is-open")) return;
+    if (picker.contains(event.target) || event.target.closest(".date-input-shell")) return;
+    closeDatePicker();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeDatePicker();
+  });
+
+  document.addEventListener("click", (event) => {
+    const dayButton = event.target.closest("[data-date-value]");
+    if (dayButton && activeDateInput) {
+      setDateInputValue(activeDateInput, dayButton.dataset.dateValue);
+      closeDatePicker();
+      return;
+    }
+    const actionButton = event.target.closest("[data-date-picker-action]");
+    if (!actionButton || !activeDateInput) return;
+    const action = actionButton.dataset.datePickerAction;
+    if (action === "prev") {
+      activePickerMonth = new Date(activePickerMonth.getFullYear(), activePickerMonth.getMonth() - 1, 1);
+      renderDatePicker();
+    }
+    if (action === "next") {
+      activePickerMonth = new Date(activePickerMonth.getFullYear(), activePickerMonth.getMonth() + 1, 1);
+      renderDatePicker();
+    }
+    if (action === "clear") {
+      setDateInputValue(activeDateInput, "");
+      closeDatePicker();
+    }
+    if (action === "today") {
+      setDateInputValue(activeDateInput, isoFromDate(new Date()));
+      closeDatePicker();
+    }
+  });
+
+  syncDatePickerTriggers();
 }
 
 function formatBytes(bytes) {
@@ -675,7 +913,7 @@ function isDueSoon(subscription) {
   const cancelBy = cancellationDate(subscription);
   if (!cancelBy) return false;
   const due = startOfDay(cancelBy);
-  return due <= addDays(today, 45) && subscription.status !== "Gekuendigt";
+  return due <= addDays(today, 45) && isActionableStatus(subscription);
 }
 
 function daysUntil(date) {
@@ -698,11 +936,35 @@ function deadlineLabel(days) {
 }
 
 function displayStatus(status) {
-  return status === "Gekuendigt" ? "Gekündigt" : status;
+  const labels = {
+    Aktiv: "Aktiv",
+    Pausiert: "Pausiert",
+    KuendigungVorbereitet: "Kündigung vorbereitet",
+    KuendigungGesendet: "Kündigung gesendet",
+    Bestaetigt: "Bestätigt / beendet",
+    Archiviert: "Archiviert",
+  };
+  return labels[normalizeStatus(status)] || status || "Aktiv";
+}
+
+function isTerminationStatus(status) {
+  return ["KuendigungVorbereitet", "KuendigungGesendet", "Bestaetigt", "Archiviert"].includes(normalizeStatus(status));
+}
+
+function isFinalStatus(status) {
+  return ["Bestaetigt", "Archiviert"].includes(normalizeStatus(status));
+}
+
+function isBillableStatus(subscription) {
+  return !["Pausiert", "Bestaetigt", "Archiviert"].includes(normalizeStatus(subscription.status));
+}
+
+function isActionableStatus(subscription) {
+  return !["Pausiert", "Bestaetigt", "Archiviert"].includes(normalizeStatus(subscription.status));
 }
 
 function isCanceled(subscription) {
-  return subscription.status === "Gekuendigt";
+  return isTerminationStatus(subscription.status);
 }
 
 function effectiveEndDate(subscription) {
@@ -710,14 +972,15 @@ function effectiveEndDate(subscription) {
 }
 
 function isArchived(subscription) {
-  if (!isCanceled(subscription)) return false;
+  if (normalizeStatus(subscription.status) === "Archiviert") return true;
+  if (!isFinalStatus(subscription.status)) return false;
   const endDate = effectiveEndDate(subscription);
   if (!endDate) return false;
   return startOfDay(new Date(endDate)) < startOfDay(new Date());
 }
 
 function isCanceledStillActive(subscription) {
-  return isCanceled(subscription) && !isArchived(subscription);
+  return isTerminationStatus(subscription.status) && !isArchived(subscription);
 }
 
 function contractTypeLabel(subscription) {
@@ -727,9 +990,27 @@ function contractTypeLabel(subscription) {
 }
 
 function statusClass(status) {
-  if (status === "Gekuendigt") return "status-canceled";
-  if (status === "Pausiert") return "status-paused";
+  const normalized = normalizeStatus(status);
+  if (normalized === "Archiviert") return "status-archived";
+  if (normalized === "Bestaetigt") return "status-confirmed";
+  if (normalized === "KuendigungGesendet") return "status-sent";
+  if (normalized === "KuendigungVorbereitet") return "status-prepared";
+  if (normalized === "Pausiert") return "status-paused";
   return "status-active";
+}
+
+function nextTerminationStatus(status) {
+  const normalized = normalizeStatus(status);
+  if (normalized === "KuendigungVorbereitet") return "KuendigungGesendet";
+  if (normalized === "KuendigungGesendet") return "Bestaetigt";
+  return "KuendigungVorbereitet";
+}
+
+function nextTerminationActionLabel(status) {
+  const normalized = normalizeStatus(status);
+  if (normalized === "KuendigungVorbereitet") return "Gesendet markieren";
+  if (normalized === "KuendigungGesendet") return "Bestätigt markieren";
+  return "Kündigung vorbereiten";
 }
 
 function setFilterMode(mode) {
@@ -819,6 +1100,43 @@ function routeForSubscription(subscription) {
   return "subscriptions";
 }
 
+function setFieldsetCollapsed(fieldset, collapsed) {
+  const button = fieldset.querySelector(".form-legend-button");
+  fieldset.classList.toggle("is-fieldset-collapsed", collapsed);
+  if (button) {
+    button.setAttribute("aria-expanded", String(!collapsed));
+    const indicator = button.querySelector("span:last-child");
+    if (indicator) indicator.textContent = collapsed ? "+" : "−";
+  }
+}
+
+function openFieldsetForControl(control) {
+  const fieldset = control?.closest("fieldset.form-accordion");
+  if (fieldset) setFieldsetCollapsed(fieldset, false);
+}
+
+function initFormAccordions() {
+  const collapsedByDefault = new Set(["Kontakt", "Dokumente", "Notizen"]);
+  document.querySelectorAll("#subscriptionForm fieldset").forEach((fieldset) => {
+    const legend = fieldset.querySelector("legend");
+    if (!legend || legend.dataset.accordionReady) return;
+    const title = legend.textContent.trim();
+    fieldset.classList.add("form-accordion");
+    legend.dataset.accordionReady = "true";
+    legend.innerHTML = `
+      <button class="form-legend-button" type="button" aria-expanded="true">
+        <span>${escapeHtml(title)}</span>
+        <span aria-hidden="true">−</span>
+      </button>
+    `;
+    const button = legend.querySelector("button");
+    button.addEventListener("click", () => {
+      setFieldsetCollapsed(fieldset, !fieldset.classList.contains("is-fieldset-collapsed"));
+    });
+    setFieldsetCollapsed(fieldset, collapsedByDefault.has(title));
+  });
+}
+
 function setRoute(route, shouldUpdateHash = true) {
   currentRoute = normalizeRoute(route);
   if (currentRoute === "subscriptions") {
@@ -890,10 +1208,292 @@ async function sendCancellationEmail(subscription) {
     if (!response.ok) {
       throw new Error(result.detail || result.error || "Mail-Service nicht erreichbar");
     }
+    setSubscriptionStatus(subscription.id, "KuendigungGesendet");
     showToast("Kündigungs-E-Mail wurde gesendet.");
   } catch (error) {
     showToast(error.message || "E-Mail konnte nicht gesendet werden.");
   }
+}
+
+function downloadTextFile(filename, content, type = "text/plain;charset=utf-8") {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function filenameDateStamp() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function exportBackup() {
+  const payload = {
+    app: "Abo Pilot",
+    exportedAt: new Date().toISOString(),
+    version: currentImportVersion,
+    subscriptions,
+  };
+  downloadTextFile(`abo-pilot-backup-${filenameDateStamp()}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+  showToast("Backup exportiert.");
+}
+
+function duplicateSignature(subscription) {
+  return [
+    subscription.name,
+    subscription.category,
+    subscription.renewalDate || subscription.endDate || "",
+    subscription.contractNumber || "",
+  ]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .join("|");
+}
+
+function sanitizeImportedSubscription(item) {
+  if (!item || typeof item !== "object") return null;
+  const name = String(item.name || "").trim();
+  if (!name) return null;
+  return {
+    id: String(item.id || crypto.randomUUID()),
+    name,
+    category: String(item.category || "Sonstiges"),
+    amount: Number(item.amount || 0),
+    interval: ["monthly", "quarterly", "yearly", "once"].includes(item.interval) ? item.interval : "monthly",
+    startDate: String(item.startDate || ""),
+    renewalDate: String(item.renewalDate || ""),
+    endDate: String(item.endDate || ""),
+    noRenewal: Boolean(item.noRenewal),
+    noticeDays: Number(item.noticeDays || 0),
+    status: normalizeStatus(item.status),
+    tags: normalizeTags(item.tags),
+    reminderDate: String(item.reminderDate || ""),
+    reminderChannel: String(item.reminderChannel || "none"),
+    loginEmail: String(item.loginEmail || ""),
+    supportEmail: String(item.supportEmail || ""),
+    address: String(item.address || ""),
+    familyMember: String(item.familyMember || ""),
+    contractNumber: String(item.contractNumber || ""),
+    pin: String(item.pin || ""),
+    puk: String(item.puk || ""),
+    notes: String(item.notes || ""),
+    documents: Array.isArray(item.documents) ? item.documents : [],
+  };
+}
+
+function analyzeImportItems(items) {
+  const existingIds = new Set(subscriptions.map((subscription) => subscription.id));
+  const existingSignatures = new Set(subscriptions.map(duplicateSignature));
+  const imported = [];
+  let skipped = 0;
+
+  items.forEach((item) => {
+    const subscription = sanitizeImportedSubscription(item);
+    if (!subscription) {
+      skipped += 1;
+      return;
+    }
+    const signature = duplicateSignature(subscription);
+    if (existingIds.has(subscription.id) || existingSignatures.has(signature)) {
+      skipped += 1;
+      return;
+    }
+    existingIds.add(subscription.id);
+    existingSignatures.add(signature);
+    imported.push(subscription);
+  });
+
+  return { imported, skipped };
+}
+
+function importSubscriptions(items) {
+  const { imported, skipped } = analyzeImportItems(items);
+  if (!imported.length) {
+    showToast(skipped ? "Keine neuen Einträge im Backup gefunden." : "Backup enthält keine gültigen Einträge.");
+    return;
+  }
+
+  subscriptions = [...imported, ...subscriptions];
+  selectedId = imported[0].id;
+  if (!save()) return;
+  render();
+  showToast(`${imported.length} importiert, ${skipped} übersprungen.`);
+}
+
+function renderImportPreview(imported, skipped) {
+  pendingImportSubscriptions = imported;
+  pendingImportSkipped = skipped;
+  if (!importPreviewContent || !importPreviewConfirm) return;
+  importPreviewConfirm.disabled = imported.length === 0;
+  importPreviewContent.innerHTML = `
+    <div class="import-preview-stats">
+      <span><strong>${imported.length}</strong><small>neu</small></span>
+      <span><strong>${skipped}</strong><small>übersprungen</small></span>
+    </div>
+    ${
+      imported.length
+        ? `<div class="import-preview-list">
+            ${imported
+              .slice(0, 6)
+              .map(
+                (subscription) => `
+                  <div class="import-preview-item">
+                    <strong>${escapeHtml(subscription.name)}</strong>
+                    <small>${escapeHtml(subscription.category)} · ${amountLabel(subscription)} · ${displayStatus(subscription.status)}</small>
+                  </div>
+                `
+              )
+              .join("")}
+            ${imported.length > 6 ? `<div class="import-preview-item"><strong>+${imported.length - 6} weitere</strong><small>werden ebenfalls importiert</small></div>` : ""}
+          </div>`
+        : `<div class="detail-empty">Keine neuen Einträge erkannt. Das Backup besteht nur aus Dubletten oder ungültigen Datensätzen.</div>`
+    }
+  `;
+  openManagedDialog(importPreviewDialog, imported.length ? importPreviewConfirm : importPreviewCancel);
+}
+
+function confirmImportPreview() {
+  if (!pendingImportSubscriptions.length) {
+    showToast("Keine neuen Einträge zum Importieren.");
+    return;
+  }
+  subscriptions = [...pendingImportSubscriptions, ...subscriptions];
+  selectedId = pendingImportSubscriptions[0].id;
+  const importedCount = pendingImportSubscriptions.length;
+  const skippedCount = pendingImportSkipped;
+  pendingImportSubscriptions = [];
+  pendingImportSkipped = 0;
+  if (!save()) return;
+  render();
+  showToast(`${importedCount} importiert, ${skippedCount} übersprungen.`);
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result || "")));
+    reader.addEventListener("error", reject);
+    reader.readAsText(file);
+  });
+}
+
+async function importBackupFile(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith(".json")) {
+    showToast("Bitte ein JSON-Backup auswählen.");
+    return;
+  }
+  try {
+    const text = await readFileAsText(file);
+    const payload = JSON.parse(text);
+    const items = Array.isArray(payload) ? payload : payload.subscriptions;
+    if (!Array.isArray(items)) {
+      showToast("Backup-Format nicht erkannt.");
+      return;
+    }
+    const { imported, skipped } = analyzeImportItems(items);
+    renderImportPreview(imported, skipped);
+  } catch {
+    showToast("Backup konnte nicht gelesen werden.");
+  }
+}
+
+function escapeIcsText(value) {
+  return String(value || "")
+    .replaceAll("\\", "\\\\")
+    .replaceAll(";", "\\;")
+    .replaceAll(",", "\\,")
+    .replaceAll("\n", "\\n");
+}
+
+function icsDate(value) {
+  return String(value || "").replaceAll("-", "");
+}
+
+function icsTimestamp() {
+  return new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+function reminderEvents() {
+  const events = [];
+  subscriptions
+    .filter((subscription) => !isArchived(subscription))
+    .forEach((subscription) => {
+      const cancelBy = cancellationDate(subscription);
+      if (cancelBy && isActionableStatus(subscription)) {
+        events.push({
+          date: isoFromDate(cancelBy),
+          summary: `Kündigungsfrist: ${subscription.name}`,
+          description: `Kündigen bis ${formatDate(cancelBy)}. Erneuerung ${formatDate(subscription.renewalDate)}. Status: ${displayStatus(subscription.status)}.`,
+          uid: `${subscription.id}-cancel`,
+        });
+      }
+      if (!isOneTime(subscription) && subscription.renewalDate && isActionableStatus(subscription)) {
+        events.push({
+          date: subscription.renewalDate,
+          summary: `Erneuerung: ${subscription.name}`,
+          description: `Vertrag erneuert sich am ${formatDate(subscription.renewalDate)}. Kündigungsfrist: ${Number(subscription.noticeDays || 0)} Tage.`,
+          uid: `${subscription.id}-renewal`,
+        });
+      }
+      if (subscription.reminderDate) {
+        events.push({
+          date: subscription.reminderDate,
+          summary: `Reminder: ${subscription.name}`,
+          description: `Reminder-Kanal: ${reminderChannelLabel(subscription.reminderChannel)}.`,
+          uid: `${subscription.id}-reminder`,
+        });
+      }
+    });
+  return events.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function manualReminderItems(sourceSubscriptions = subscriptions) {
+  return sourceSubscriptions
+    .filter((subscription) => !isArchived(subscription) && subscription.reminderDate)
+    .map((subscription) => ({
+      ...subscription,
+      reminderDays: daysUntil(dateFromIso(subscription.reminderDate)),
+    }))
+    .sort((a, b) => a.reminderDate.localeCompare(b.reminderDate));
+}
+
+function reminderTone(days) {
+  if (days < 0) return "overdue";
+  if (days <= 7) return "hot";
+  if (days <= 30) return "warm";
+  return "calm";
+}
+
+function exportIcsCalendar() {
+  const events = reminderEvents();
+  if (!events.length) {
+    showToast("Keine Fristen oder Reminder für den Kalenderexport vorhanden.");
+    return;
+  }
+  const stamp = icsTimestamp();
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Abo Pilot//Fristen//DE",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    ...events.flatMap((event) => [
+      "BEGIN:VEVENT",
+      `UID:${escapeIcsText(event.uid)}@abo-pilot.local`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART;VALUE=DATE:${icsDate(event.date)}`,
+      `SUMMARY:${escapeIcsText(event.summary)}`,
+      `DESCRIPTION:${escapeIcsText(event.description)}`,
+      "END:VEVENT",
+    ]),
+    "END:VCALENDAR",
+  ];
+  downloadTextFile(`abo-pilot-fristen-${filenameDateStamp()}.ics`, `${lines.join("\r\n")}\r\n`, "text/calendar;charset=utf-8");
+  showToast(`${events.length} Kalendertermine exportiert.`);
 }
 
 function save() {
@@ -928,6 +1528,11 @@ function addDaysIso(dateValue, days) {
 function normalizeStoredSubscriptions() {
   let changed = false;
   subscriptions.forEach((subscription) => {
+    const normalizedStatus = normalizeStatus(subscription.status);
+    if (subscription.status !== normalizedStatus) {
+      subscription.status = normalizedStatus;
+      changed = true;
+    }
     if (subscription.interval === "once" && !subscription.noRenewal) {
       subscription.noRenewal = true;
       subscription.renewalDate = "";
@@ -986,6 +1591,27 @@ function toggleTheme() {
   localStorage.setItem(themeKey, document.body.classList.contains("dark") ? "dark" : "light");
 }
 
+function openManagedDialog(dialog, focusTarget) {
+  if (!dialog) return;
+  dialogReturnFocus.set(dialog, document.activeElement);
+  dialog.showModal();
+  window.requestAnimationFrame(() => {
+    const target =
+      focusTarget ||
+      dialog.querySelector("[autofocus]") ||
+      dialog.querySelector("input, select, textarea, button, [href], [tabindex]:not([tabindex='-1'])");
+    target?.focus();
+  });
+}
+
+function restoreDialogFocus(dialog) {
+  const target = dialogReturnFocus.get(dialog);
+  dialogReturnFocus.delete(dialog);
+  if (target && typeof target.focus === "function" && document.contains(target)) {
+    target.focus();
+  }
+}
+
 function applyPreset(preset) {
   providerSearch.value = preset.name;
   commandProviderSearch.value = preset.name;
@@ -1008,13 +1634,15 @@ function applyPreset(preset) {
 function toggleFamilyFields() {
   const isFamily = field("category").value === "Handy Familie";
   familyFields.classList.toggle("is-collapsed", !isFamily);
+  if (isFamily) setFieldsetCollapsed(familyFields, false);
 }
 
 function toggleRenewalFields() {
   const isPolicy = field("category").value === "Police";
-  const isCanceledStatus = field("status").value === "Gekuendigt";
+  const isCanceledStatus = isFinalStatus(field("status").value) || field("status").value === "KuendigungGesendet";
   document.querySelector("#endDateLabel").classList.toggle("is-collapsed", !isPolicy && !isCanceledStatus);
   document.querySelector("#noRenewalLabel").classList.toggle("is-collapsed", !isPolicy);
+  if (isPolicy || isCanceledStatus) openFieldsetForControl(field("endDate"));
   if (!isPolicy) {
     field("noRenewal").checked = false;
     if (!isCanceledStatus) {
@@ -1033,6 +1661,7 @@ function toggleRenewalFields() {
   if ((noRenewal || isCanceledStatus) && !field("endDate").value && field("renewalDate").value) {
     field("endDate").value = field("renewalDate").value;
   }
+  syncDatePickerTriggers();
 }
 
 function formTitleValue() {
@@ -1045,8 +1674,18 @@ function formTitleValue() {
   return nameValue;
 }
 
+function syncNameFromProvider() {
+  const nameInput = field("name");
+  const providerValue = providerSearch.value.trim();
+  const originalProviderValue = providerSearch.dataset.originalValue || "";
+  if (!nameInput.value.trim() || nameInput.value.trim() === originalProviderValue) {
+    nameInput.value = providerValue;
+  }
+}
+
 function subscriptionFromForm(id = crypto.randomUUID()) {
   const existing = subscriptions.find((subscription) => subscription.id === id);
+  const status = normalizeStatus(field("status").value);
   return {
     id,
     name: formTitleValue(),
@@ -1055,10 +1694,10 @@ function subscriptionFromForm(id = crypto.randomUUID()) {
     interval: field("interval").value,
     startDate: field("startDate").value,
     renewalDate: field("noRenewal").checked || field("interval").value === "once" ? "" : field("renewalDate").value,
-    endDate: field("endDate").value || (field("status").value === "Gekuendigt" ? field("renewalDate").value : ""),
+    endDate: field("endDate").value || (isFinalStatus(status) ? field("renewalDate").value : ""),
     noRenewal: field("noRenewal").checked || field("interval").value === "once",
     noticeDays: field("noRenewal").checked || field("interval").value === "once" ? 0 : Number(field("noticeDays").value),
-    status: field("status").value,
+    status,
     tags: normalizeTags(field("tags").value),
     reminderDate: field("reminderDate").value,
     reminderChannel: field("reminderChannel").value,
@@ -1136,7 +1775,7 @@ function populateForm(subscription) {
   field("endDate").value = subscription.endDate || (subscription.noRenewal ? subscription.renewalDate : "");
   field("noRenewal").checked = Boolean(subscription.noRenewal);
   field("noticeDays").value = subscription.noticeDays;
-  field("status").value = subscription.status;
+  field("status").value = normalizeStatus(subscription.status);
   field("tags").value = normalizeTags(subscription.tags).join(", ");
   field("reminderDate").value = subscription.reminderDate || "";
   field("reminderChannel").value = subscription.reminderChannel || "none";
@@ -1181,8 +1820,7 @@ function openEditor(subscription = null, presetCategory = "") {
       toggleRenewalFields();
     }
   }
-  editorDialog.showModal();
-  field("name").focus();
+  openManagedDialog(editorDialog, providerSearch);
 }
 
 function startEditing(subscription) {
@@ -1192,9 +1830,12 @@ function startEditing(subscription) {
 function setSubscriptionStatus(id, status) {
   const subscription = subscriptions.find((item) => item.id === id);
   if (!subscription) return;
-  subscription.status = status;
-  if (status === "Gekuendigt" && !subscription.endDate) {
+  subscription.status = normalizeStatus(status);
+  if (isFinalStatus(subscription.status) && !subscription.endDate) {
     subscription.endDate = subscription.renewalDate || new Date().toISOString().slice(0, 10);
+  }
+  if (subscription.status === "Aktiv") {
+    subscription.endDate = "";
   }
   selectedId = id;
   save();
@@ -1209,7 +1850,7 @@ function requestDeleteSubscription(id) {
   const type = subscription.category === "Police" ? "Police" : subscription.category === "Handy Familie" ? "Handy-Abo" : "Abo";
   deleteDialogTitle.textContent = `${type} löschen?`;
   deleteDialogText.textContent = `"${subscription.name}" wird aus diesem Browser entfernt. Diese Aktion kann nicht rückgängig gemacht werden.`;
-  deleteDialog.showModal();
+  openManagedDialog(deleteDialog, document.querySelector("#deleteCancel"));
 }
 
 function requestDeleteDocument(subscriptionId, documentId) {
@@ -1220,7 +1861,7 @@ function requestDeleteDocument(subscriptionId, documentId) {
   pendingDeleteDocumentId = documentId;
   deleteDialogTitle.textContent = "PDF löschen?";
   deleteDialogText.textContent = `"${document.name}" wird aus diesem Eintrag entfernt. Diese Aktion kann nicht rückgängig gemacht werden.`;
-  deleteDialog.showModal();
+  openManagedDialog(deleteDialog, document.querySelector("#deleteCancel"));
 }
 
 function deleteSubscription(id) {
@@ -1312,7 +1953,7 @@ function applyPresetByName(value, shouldScroll = false) {
 }
 
 function renderMetrics(sourceSubscriptions = subscriptions) {
-  const billable = sourceSubscriptions.filter((subscription) => subscription.status !== "Gekuendigt" && subscription.status !== "Pausiert" && !isOneTime(subscription));
+  const billable = sourceSubscriptions.filter((subscription) => isBillableStatus(subscription) && !isOneTime(subscription));
   const monthly = billable.reduce((sum, subscription) => sum + monthlyCost(subscription), 0);
   const yearly = monthly * 12;
   const actionable = sourceSubscriptions.filter(isDueSoon);
@@ -1320,7 +1961,7 @@ function renderMetrics(sourceSubscriptions = subscriptions) {
   const actionCount = actionable.length;
   const familyCount = sourceSubscriptions.filter((subscription) => subscription.category === "Handy Familie").length;
   const sortedDue = sourceSubscriptions
-    .filter((subscription) => subscription.status !== "Gekuendigt" && !isOneTime(subscription) && cancellationDate(subscription))
+    .filter((subscription) => isActionableStatus(subscription) && !isOneTime(subscription) && cancellationDate(subscription))
     .slice()
     .sort((a, b) => cancellationDate(a) - cancellationDate(b));
 
@@ -1492,7 +2133,7 @@ function renderDocumentAnalysisResult() {
         <div><span>Anbieter</span><strong>${escapeHtml(fields.provider || "-")}</strong></div>
         <div><span>Name</span><strong>${escapeHtml(fields.name || "-")}</strong></div>
         <div><span>Police / Vertrag</span><strong>${escapeHtml(fields.policyNumber || "-")}</strong></div>
-        <div><span>Betrag</span><strong>${amount ? formatCurrency(amount) : "-"}</strong></div>
+        <div><span>Betrag</span><strong>${amount ? formatCurrency(amount) : "Betrag fehlt"}</strong></div>
         <div><span>Intervall</span><strong>${intervalLabel(fields.interval || "yearly")}</strong></div>
         <div><span>Beginn</span><strong>${formatDate(fields.startDate)}</strong></div>
         <div><span>Erneuerung</span><strong>${fields.noRenewal || fields.interval === "once" ? "Keine Erneuerung" : formatDate(fields.renewalDate)}</strong></div>
@@ -1590,7 +2231,7 @@ async function analyzeDocument(documentId) {
 }
 
 function renderDeadlines(sourceSubscriptions = subscriptions) {
-  const active = sourceSubscriptions.filter((subscription) => subscription.status !== "Gekuendigt");
+  const active = sourceSubscriptions.filter(isActionableStatus);
   const deadlines = active
     .filter((subscription) => !isOneTime(subscription))
     .map((subscription) => {
@@ -1661,7 +2302,10 @@ function renderDeadlines(sourceSubscriptions = subscriptions) {
               <ul>
                 ${month.items
                   .slice(0, 3)
-                  .map((subscription) => `<li>${escapeHtml(subscription.name)}<small>${formatDate(subscription.renewalDate)}</small></li>`)
+                  .map((subscription) => {
+                    const targetRoute = routeForSubscription(subscription);
+                    return `<li><a class="calendar-renewal-link" href="#${targetRoute}" data-id="${subscription.id}">${escapeHtml(subscription.name)}<small>${formatDate(subscription.renewalDate)}</small></a></li>`;
+                  })
                   .join("")}
               </ul>
             </article>
@@ -1670,9 +2314,58 @@ function renderDeadlines(sourceSubscriptions = subscriptions) {
         .join("")
     : `<div class="detail-empty">Noch keine Erneuerungen eingetragen.</div>`;
 
+  const reminders = manualReminderItems(sourceSubscriptions);
+  const reminderOverdue = reminders.filter((item) => item.reminderDays < 0).length;
+  if (reminderStatus) {
+    reminderStatus.textContent = reminderOverdue ? `${reminderOverdue} überfällig` : `${reminders.length} geplant`;
+  }
+  if (reminderOverview) {
+    reminderOverview.innerHTML = reminders.length
+      ? reminders
+          .slice(0, 6)
+          .map((subscription) => {
+            const tone = reminderTone(subscription.reminderDays);
+            const targetRoute = routeForSubscription(subscription);
+            return `
+              <a class="reminder-item ${tone}" href="#${targetRoute}" data-id="${subscription.id}">
+                <span class="deadline-date">${formatDate(subscription.reminderDate)}</span>
+                <span class="deadline-copy">
+                  <strong>${escapeHtml(subscription.name)}</strong>
+                  <small>${deadlineLabel(subscription.reminderDays)} · ${reminderChannelLabel(subscription.reminderChannel)}</small>
+                </span>
+                <span class="deadline-badge">${escapeHtml(subscription.category)}</span>
+              </a>
+            `;
+          })
+          .join("")
+      : `<div class="detail-empty">Noch keine manuellen Reminder gesetzt. Trage im Abo-Dialog ein Reminder-Datum ein.</div>`;
+  }
+
   document.querySelectorAll(".deadline-item").forEach((button) => {
     button.addEventListener("click", () => {
       const subscription = subscriptions.find((item) => item.id === button.dataset.id);
+      if (!subscription) return;
+      selectedId = subscription.id;
+      render();
+      setRoute(routeForSubscription(subscription));
+    });
+  });
+
+  document.querySelectorAll(".calendar-renewal-link").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      const subscription = subscriptions.find((item) => item.id === link.dataset.id);
+      if (!subscription) return;
+      selectedId = subscription.id;
+      render();
+      setRoute(routeForSubscription(subscription));
+    });
+  });
+
+  document.querySelectorAll(".reminder-item").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      const subscription = subscriptions.find((item) => item.id === link.dataset.id);
       if (!subscription) return;
       selectedId = subscription.id;
       render();
@@ -1715,10 +2408,11 @@ function visibleSubscriptions() {
     const matchesFilter =
       (filterMode === "all" && !isCanceled(subscription)) ||
       (filterMode === "due" && isDueSoon(subscription)) ||
+      (filterMode === "incomplete" && dataQualityIssues(subscription).length > 0) ||
       (filterMode === "canceled" && isCanceledStillActive(subscription)) ||
       (filterMode === "family" && subscription.category === "Handy Familie") ||
       (filterMode === "policies" && subscription.category === "Police");
-    return inRouteScope && !isArchived(subscription) && matchesQuery && matchesFilter && matchesQuickCategory(subscription);
+    return inRouteScope && !isArchived(subscription) && matchesQuery && matchesFilter;
   });
 }
 
@@ -1744,18 +2438,21 @@ function matchesCurrentSearch(subscription) {
 function subscriptionRowMarkup(subscription, options = {}) {
   const dueSoon = isDueSoon(subscription);
   const selected = subscription.id === selectedId ? "selected" : "";
-  const paused = subscription.status === "Pausiert";
+  const status = normalizeStatus(subscription.status);
+  const paused = status === "Pausiert";
   const canceled = isCanceled(subscription);
   const archived = isArchived(subscription);
+  const final = isFinalStatus(status);
   const compact = options.compact ? "compact-row" : "";
   return `
-    <article class="subscription-row ${selected} ${compact} ${canceled ? "is-canceled" : ""} ${archived ? "is-archived" : ""} ${paused ? "is-paused" : ""}" data-id="${subscription.id}">
+    <article class="subscription-row ${selected} ${compact} ${canceled ? "is-canceled" : ""} ${final ? "is-final" : ""} ${archived ? "is-archived" : ""} ${paused ? "is-paused" : ""}" data-id="${subscription.id}" tabindex="0" aria-label="${escapeHtml(subscription.name)} anzeigen">
       <div class="subscription-main">
         <div class="subscription-title">
           <strong>${escapeHtml(subscription.name)}</strong>
           <span class="tag">${escapeHtml(subscription.category)}</span>
-          ${archived ? `<span class="status-pill status-archived">Archiviert</span>` : canceled ? `<span class="status-pill status-canceled">Gekündigt</span>` : ""}
+          ${archived ? `<span class="status-pill status-archived">Archiviert</span>` : canceled ? `<span class="status-pill ${statusClass(status)}">${displayStatus(status)}</span>` : ""}
           ${dueSoon ? `<span class="risk">Frist</span>` : ""}
+          ${dataQualityBadges(subscription)}
         </div>
         <div class="subscription-meta">
           <span>${displayStatus(subscription.status)}</span>
@@ -1765,16 +2462,16 @@ function subscriptionRowMarkup(subscription, options = {}) {
         </div>
       </div>
       <div class="subscription-side">
-        <span class="price">${formatCurrency(Number(subscription.amount || 0))}</span>
+        <span class="price ${hasMissingAmount(subscription) ? "is-missing" : ""}">${amountLabel(subscription)}</span>
         <small>${intervalLabel(subscription.interval)}</small>
         <div class="subscription-actions" aria-label="Abo-Aktionen">
           ${dueSoon && !canceled ? `<button class="button warning row-action" type="button" data-action="deadline" data-id="${subscription.id}">Frist</button>` : ""}
           <button class="button subtle row-action" type="button" data-action="edit" data-id="${subscription.id}">Bearbeiten</button>
           ${
-            canceled
+            final || archived
               ? `<button class="button subtle row-action" type="button" data-action="activate" data-id="${subscription.id}">Wieder aktivieren</button>`
               : `<button class="button warning row-action" type="button" data-action="pause" data-id="${subscription.id}">${paused ? "Aktivieren" : "Pausieren"}</button>
-                 <button class="button danger row-action" type="button" data-action="cancel" data-id="${subscription.id}">Gekündigt</button>`
+                 <button class="button danger row-action" type="button" data-action="advance-cancel" data-id="${subscription.id}">${nextTerminationActionLabel(status)}</button>`
           }
         </div>
       </div>
@@ -1802,6 +2499,12 @@ function renderList() {
       selectedId = row.dataset.id;
       render();
     });
+    row.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      selectedId = row.dataset.id;
+      render();
+    });
   });
 
   document.querySelectorAll("#subscriptionList .subscription-actions button, #canceledActiveList .subscription-actions button").forEach((button) => {
@@ -1822,7 +2525,7 @@ function renderList() {
         return;
       }
       if (button.dataset.action === "pause") {
-        const nextStatus = subscription.status === "Pausiert" ? "Aktiv" : "Pausiert";
+        const nextStatus = normalizeStatus(subscription.status) === "Pausiert" ? "Aktiv" : "Pausiert";
         setSubscriptionStatus(subscription.id, nextStatus);
         showToast(nextStatus === "Pausiert" ? "Abo als pausiert markiert." : "Abo ist wieder aktiv.");
         return;
@@ -1832,10 +2535,11 @@ function renderList() {
         showToast("Abo ist wieder aktiv.");
         return;
       }
-      if (button.dataset.action === "cancel") {
-        setSubscriptionStatus(subscription.id, "Gekuendigt");
+      if (button.dataset.action === "advance-cancel") {
+        const nextStatus = nextTerminationStatus(subscription.status);
+        setSubscriptionStatus(subscription.id, nextStatus);
         setFilterMode("canceled");
-        showToast("Abo als gekündigt markiert.");
+        showToast(`Status: ${displayStatus(nextStatus)}.`);
       }
     });
   });
@@ -1882,6 +2586,7 @@ function documentDetailMarkup(subscription) {
         <input class="visually-hidden detail-document-upload" type="file" accept="application/pdf,.pdf" multiple />
       </label>
     </div>
+    <small class="document-storage-note">Aktuell werden PDFs als Browserdaten in localStorage gespeichert. Für grosse Archive bitte Backup exportieren; später wandern Dateien in serverseitigen Objekt-Storage.</small>
   `;
   if (!documents.length) {
     return `
@@ -1917,27 +2622,39 @@ function detailMarkup(subscription, revealed = false, includeDocumentAnalysis = 
   const days = daysUntil(cancelBy);
   const canceled = isCanceled(subscription);
   const archived = isArchived(subscription);
+  const status = normalizeStatus(subscription.status);
+  const final = isFinalStatus(status);
   const dueSoon = isDueSoon(subscription);
   const oneTime = isOneTime(subscription);
   const type = subscription.category === "Police" ? "Police" : subscription.category === "Handy Familie" ? "Handy-Abo" : "Abo";
   const annualCost = monthlyCost(subscription) * 12;
   const familyContract = [subscription.familyMember, subscription.contractNumber].filter(Boolean).map(escapeHtml).join("<br />");
   const noticeLabel = oneTime ? "Keine Frist" : `${Number(subscription.noticeDays || 0)} Tage${dueSoon ? ` · ${deadlineLabel(days)}` : ""}`;
+  const qualityIssues = dataQualityIssues(subscription);
 
   const sections = [
+    ...(qualityIssues.length
+      ? [
+          detailSection(
+            "Datenqualität",
+            [],
+            `<div class="quality-list">${qualityIssues.map((issue) => `<span class="quality-badge">${escapeHtml(issue)}</span>`).join("")}</div>`
+          ),
+        ]
+      : []),
     detailSection(
       "Kosten & Laufzeit",
       oneTime
         ? [
-            detailRow("Total", `${formatCurrency(Number(subscription.amount || 0))} · einmalig`),
+            detailRow("Total", hasMissingAmount(subscription) ? "Betrag fehlt" : `${amountLabel(subscription)} · einmalig`),
             detailRow("Laufende Monatskosten", formatCurrency(0)),
             detailRow("Beginn", formatDate(subscription.startDate)),
             detailRow("Bis", formatDate(subscription.endDate)),
           ]
         : [
-            detailRow("Betrag", `${formatCurrency(Number(subscription.amount || 0))} · ${intervalLabel(subscription.interval)}`),
-            detailRow("Monatlich gerechnet", formatCurrency(monthlyCost(subscription))),
-            detailRow("Jährlich gerechnet", formatCurrency(annualCost)),
+            detailRow("Betrag", hasMissingAmount(subscription) ? "Betrag fehlt" : `${amountLabel(subscription)} · ${intervalLabel(subscription.interval)}`),
+            detailRow("Monatlich gerechnet", recurringCostLabel(subscription)),
+            detailRow("Jährlich gerechnet", yearlyCostLabel(subscription)),
             detailRow("Beginn", formatDate(subscription.startDate)),
           ]
     ),
@@ -2002,14 +2719,14 @@ function detailMarkup(subscription, revealed = false, includeDocumentAnalysis = 
           <p>${archived ? `Archiviert · beendet am ${formatDate(effectiveEndDate(subscription))}` : oneTime ? `Einmalig · gültig bis ${formatDate(subscription.endDate)}` : dueSoon && !canceled ? `Kündigungsfenster: ${deadlineLabel(days)}` : `${displayStatus(subscription.status)} · ${documentCountLabel(subscription)}`}</p>
         </div>
         <div class="detail-hero-price">
-          <strong>${formatCurrency(Number(subscription.amount || 0))}</strong>
-          <span>${intervalLabel(subscription.interval)}</span>
+          <strong class="${hasMissingAmount(subscription) ? "is-missing" : ""}">${amountLabel(subscription)}</strong>
+          <span>${hasMissingAmount(subscription) ? "Bitte ergänzen" : intervalLabel(subscription.interval)}</span>
         </div>
       </div>
       <div class="detail-kpis">
         <span><small>${oneTime ? "Von" : "Kündigen bis"}</small><strong>${oneTime ? formatDate(subscription.startDate) : cancellationLabel(subscription)}</strong></span>
         <span><small>${oneTime ? "Bis" : "Erneuerung"}</small><strong>${oneTime ? formatDate(subscription.endDate) : renewalLabel(subscription)}</strong></span>
-        <span><small>${oneTime ? "Total" : "Monatlich"}</small><strong>${oneTime ? formatCurrency(Number(subscription.amount || 0)) : formatCurrency(monthlyCost(subscription))}</strong></span>
+        <span><small>${oneTime ? "Total" : "Monatlich"}</small><strong>${oneTime ? amountLabel(subscription) : recurringCostLabel(subscription)}</strong></span>
       </div>
       ${sections.join("")}
       <div class="detail-actions detail-actions-wide">
@@ -2022,10 +2739,10 @@ function detailMarkup(subscription, revealed = false, includeDocumentAnalysis = 
             : ""
         }
         ${
-          canceled
+          final || archived
             ? `<button class="button subtle" type="button" data-action="activate" data-id="${subscription.id}">Wieder aktivieren</button>`
-            : `<button class="button warning" type="button" data-action="pause" data-id="${subscription.id}">${subscription.status === "Pausiert" ? "Als aktiv markieren" : "Als pausiert markieren"}</button>
-               <button class="button danger" type="button" data-action="cancel" data-id="${subscription.id}">Als gekündigt markieren</button>`
+            : `<button class="button warning" type="button" data-action="pause" data-id="${subscription.id}">${status === "Pausiert" ? "Als aktiv markieren" : "Als pausiert markieren"}</button>
+               <button class="button danger" type="button" data-action="advance-cancel" data-id="${subscription.id}">${nextTerminationActionLabel(status)}</button>`
         }
         <button class="button danger ghost-danger" type="button" data-action="delete" data-id="${subscription.id}">Löschen</button>
       </div>
@@ -2077,7 +2794,7 @@ function bindDetailActions(container, subscription, renderRevealed) {
         return;
       }
       if (button.dataset.action === "pause") {
-        const nextStatus = current.status === "Pausiert" ? "Aktiv" : "Pausiert";
+        const nextStatus = normalizeStatus(current.status) === "Pausiert" ? "Aktiv" : "Pausiert";
         setSubscriptionStatus(current.id, nextStatus);
         showToast(nextStatus === "Pausiert" ? "Abo als pausiert markiert." : "Abo ist wieder aktiv.");
         return;
@@ -2087,12 +2804,13 @@ function bindDetailActions(container, subscription, renderRevealed) {
         showToast("Abo ist wieder aktiv.");
         return;
       }
-      if (button.dataset.action === "cancel") {
-        setSubscriptionStatus(current.id, "Gekuendigt");
+      if (button.dataset.action === "advance-cancel") {
+        const nextStatus = nextTerminationStatus(current.status);
+        setSubscriptionStatus(current.id, nextStatus);
         if (currentRoute === "subscriptions" && isCoreSubscription(current)) {
           setFilterMode("canceled");
         }
-        showToast("Abo als gekündigt markiert.");
+        showToast(`Status: ${displayStatus(nextStatus)}.`);
         return;
       }
       if (button.dataset.action === "delete") {
@@ -2107,8 +2825,7 @@ function bindDetailActions(container, subscription, renderRevealed) {
         pendingSecretId = current.id;
         pendingSecretRender = renderRevealed;
         masterPasswordInput.value = "";
-        unlockDialog.showModal();
-        masterPasswordInput.focus();
+        openManagedDialog(unlockDialog, masterPasswordInput);
       }
     });
   });
@@ -2142,7 +2859,7 @@ function overviewCard(subscription) {
   const canceled = isCanceled(subscription);
   const archived = isArchived(subscription);
   const oneTime = isOneTime(subscription);
-  const costLabel = oneTime ? `${formatCurrency(Number(subscription.amount || 0))} einmalig` : `${formatCurrency(monthlyCost(subscription))} monatlich`;
+  const costLabel = hasMissingAmount(subscription) ? "Betrag fehlt" : oneTime ? `${amountLabel(subscription)} einmalig` : `${recurringCostLabel(subscription)} monatlich`;
   return `
     <article class="compact-item overview-card ${subscription.id === selectedId ? "selected" : ""} ${canceled ? "is-canceled" : ""} ${archived ? "is-archived" : ""}" data-id="${subscription.id}" tabindex="0">
       <div class="overview-card-head">
@@ -2204,16 +2921,84 @@ function bindOverviewActions(container) {
   });
 }
 
+function renderFamilyMemberSummary(allFamily) {
+  if (!familyMemberSummary) return;
+  if (!allFamily.length) {
+    familyMemberSummary.innerHTML = "";
+    return;
+  }
+  const groups = allFamily.reduce((result, subscription) => {
+    const member = subscription.familyMember || "Ohne Zuordnung";
+    if (!result[member]) result[member] = [];
+    result[member].push(subscription);
+    return result;
+  }, {});
+  familyMemberSummary.innerHTML = Object.entries(groups)
+    .sort(([a], [b]) => a.localeCompare(b, "de-CH"))
+    .map(([member, items]) => {
+      const activeItems = items.filter((subscription) => isBillableStatus(subscription) && !isOneTime(subscription));
+      const monthly = activeItems.reduce((sum, subscription) => sum + monthlyCost(subscription), 0);
+      const nextDeadline = items
+        .filter((subscription) => isActionableStatus(subscription) && !isOneTime(subscription) && cancellationDate(subscription))
+        .slice()
+        .sort((a, b) => cancellationDate(a) - cancellationDate(b))[0];
+      const nextLabel = nextDeadline ? `${deadlineLabel(daysUntil(cancellationDate(nextDeadline)))} · ${formatDate(cancellationDate(nextDeadline))}` : "Keine Frist";
+      return `
+        <button class="family-summary-card ${member === familyMemberFilter ? "active" : ""}" type="button" data-family-member="${escapeHtml(member)}">
+          <strong>${escapeHtml(member)}</strong>
+          <span>${formatCurrency(monthly)} mtl.</span>
+          <small>${items.length} Vertrag${items.length === 1 ? "" : "e"} · ${nextLabel}</small>
+        </button>
+      `;
+    })
+    .join("");
+  familyMemberSummary.querySelectorAll("[data-family-member]").forEach((button) => {
+    button.addEventListener("click", () => {
+      familyMemberFilter = button.dataset.familyMember;
+      const nextFamily = allFamily.find((subscription) => (subscription.familyMember || "Ohne Zuordnung") === familyMemberFilter);
+      selectedId = nextFamily?.id || selectedId;
+      renderInsights();
+    });
+  });
+}
+
 function renderInsights() {
-  const family = subscriptions.filter((subscription) => subscription.category === "Handy Familie" && !isArchived(subscription));
+  const allFamily = subscriptions.filter((subscription) => subscription.category === "Handy Familie" && !isArchived(subscription));
+  const familyMembers = ["Alle", ...Array.from(new Set(allFamily.map((subscription) => subscription.familyMember || "Ohne Zuordnung"))).sort((a, b) => a.localeCompare(b, "de-CH"))];
+  if (!familyMembers.includes(familyMemberFilter)) familyMemberFilter = "Alle";
+  if (familyFilterBar) {
+    familyFilterBar.innerHTML = allFamily.length
+      ? familyMembers
+          .map(
+            (member) =>
+              `<button class="filter-chip ${member === familyMemberFilter ? "active" : ""}" type="button" data-family-member="${escapeHtml(member)}">${escapeHtml(member)}</button>`
+          )
+          .join("")
+      : "";
+  }
+  const family =
+    familyMemberFilter === "Alle"
+      ? allFamily
+      : allFamily.filter((subscription) => (subscription.familyMember || "Ohne Zuordnung") === familyMemberFilter);
   const selectedFamily = family.find((subscription) => subscription.id === selectedId) || family[0];
-  familyOverview.innerHTML = family.length ? family.map(overviewCard).join("") : `<div class="detail-empty">Noch keine Familien-Handy-Abos hinterlegt.</div>`;
+  renderFamilyMemberSummary(allFamily);
+  familyOverview.innerHTML = family.length
+    ? family.map(overviewCard).join("")
+    : `<div class="detail-empty">Keine Handy-Abos für diesen Familienfilter.</div>`;
   familyDetailSummary.className = "overview-detail";
   const renderFamilyDetail = (revealed = false) => {
     familyDetailSummary.innerHTML = overviewDetail(selectedFamily, "Wähle ein Handy-Abo aus.", revealed);
     if (selectedFamily) bindDetailActions(familyDetailSummary, selectedFamily, renderFamilyDetail);
   };
   renderFamilyDetail(false);
+  familyFilterBar?.querySelectorAll("[data-family-member]").forEach((button) => {
+    button.addEventListener("click", () => {
+      familyMemberFilter = button.dataset.familyMember;
+      const nextFamily = allFamily.find((subscription) => familyMemberFilter === "Alle" || (subscription.familyMember || "Ohne Zuordnung") === familyMemberFilter);
+      selectedId = nextFamily?.id || selectedId;
+      renderInsights();
+    });
+  });
   bindOverviewActions(familyOverview);
   bindOverviewActions(familyDetailSummary);
 
@@ -2227,14 +3012,24 @@ function renderInsights() {
   if (selectedPolicy) bindDetailActions(policyDetailSummary, selectedPolicy, () => renderInsights());
 
   const protectedCount = subscriptions.filter((subscription) => subscription.pin || subscription.puk).length;
+  const backupCount = subscriptions.length;
+  const documentCount = subscriptions.reduce((sum, subscription) => sum + (subscription.documents?.length || 0), 0);
   securitySummary.innerHTML = `
     <div class="compact-item">
       <strong>${protectedCount} geschützte Datensätze</strong>
       <small>PIN/PUK bleiben maskiert, werden nicht in der Suche berücksichtigt und sind nur kurz nach Passwort-Freigabe sichtbar.</small>
     </div>
     <div class="compact-item">
-      <strong>Später serverseitig verschlüsseln</strong>
-      <small>Für SaaS-Betrieb gehören diese Daten in ein Backend mit Rollen, Audit-Log und Verschlüsselung.</small>
+      <strong>${backupCount} Verträge im lokalen Backup</strong>
+      <small>Export enthält Vertragsdaten, Reminder, Status und ${documentCount} lokal gespeicherte PDF-Referenz${documentCount === 1 ? "" : "en"} als Browser-Daten.</small>
+    </div>
+    <div class="compact-item">
+      <strong>Import mit Vorschau</strong>
+      <small>Backups werden vor dem Übernehmen geprüft. Dubletten und ungültige Einträge werden gezählt und nicht automatisch überschrieben.</small>
+    </div>
+    <div class="compact-item">
+      <strong>Dokumente später auslagern</strong>
+      <small>PDFs liegen im MVP im Browser. Nächster technischer Schritt ist Objekt-Storage mit getrennten Dokument-Metadaten.</small>
     </div>
   `;
 
@@ -2286,12 +3081,32 @@ function renderArchive() {
 
 function render() {
   const dashboardItems = dashboardVisibleSubscriptions();
+  updateDashboardFilterSummary(dashboardItems);
   renderMetrics(dashboardItems);
   renderDeadlines(dashboardItems);
   renderList();
   renderDetail(false);
   renderInsights();
   renderArchive();
+}
+
+function updateDashboardFilterSummary(dashboardItems) {
+  if (!dashboardFilterSummary) return;
+  const activeParts = [];
+  const query = globalSearch.value.trim();
+  const category = selectedQuickCategory();
+  if (query) activeParts.push(`Suche "${escapeHtml(query)}"`);
+  if (category !== "Alle Kategorien") activeParts.push(category);
+  dashboardFilterSummary.classList.toggle("is-active", activeParts.length > 0);
+  dashboardFilterSummary.innerHTML = activeParts.length
+    ? `<span>${activeParts.join(" · ")} · ${dashboardItems.length} Treffer</span><button class="filter-clear" type="button">Filter löschen</button>`
+    : `<span>${dashboardItems.length} aktive Einträge im Dashboard</span>`;
+  dashboardFilterSummary.querySelector(".filter-clear")?.addEventListener("click", () => {
+    globalSearch.value = "";
+    quickCategory.value = "Alle Kategorien";
+    renderPresets();
+    render();
+  });
 }
 
 form.addEventListener("submit", async (event) => {
@@ -2320,13 +3135,11 @@ form.addEventListener("submit", async (event) => {
 
 providerSearch.addEventListener("change", () => {
   if (!applyPresetByName(providerSearch.value)) {
-    const nameInput = field("name");
-    const originalProviderValue = providerSearch.dataset.originalValue || "";
-    if (!nameInput.value.trim() || nameInput.value.trim() === originalProviderValue) {
-      nameInput.value = providerSearch.value.trim();
-    }
+    syncNameFromProvider();
   }
 });
+
+providerSearch.addEventListener("input", syncNameFromProvider);
 
 commandProviderSearch.addEventListener("change", () => {
   applyPresetByName(commandProviderSearch.value, true);
@@ -2345,6 +3158,11 @@ document.querySelector("#closeEditor").addEventListener("click", () => {
   editorDialog.close();
 });
 
+document.querySelector("#closeEditorSecondary").addEventListener("click", () => {
+  resetEditor();
+  editorDialog.close();
+});
+
 document.querySelector("#addSubscription").addEventListener("click", (event) => {
   event.preventDefault();
   setRoute("subscriptions");
@@ -2357,6 +3175,13 @@ document.querySelector("#addCoreSubscription").addEventListener("click", () => {
 
 document.querySelector("#runAnalysis").addEventListener("click", runAnalysis);
 document.querySelector("#refreshAnalysis").addEventListener("click", runAnalysis);
+exportIcsButton?.addEventListener("click", exportIcsCalendar);
+exportBackupButton?.addEventListener("click", exportBackup);
+importBackupButton?.addEventListener("click", () => backupImportFile?.click());
+backupImportFile?.addEventListener("change", async () => {
+  await importBackupFile(backupImportFile.files?.[0]);
+  backupImportFile.value = "";
+});
 
 document.querySelector("#addPhoneSubscription").addEventListener("click", () => {
   openEditor(null, "Handy Familie");
@@ -2376,6 +3201,7 @@ document.querySelectorAll("[data-route]").forEach((link) => {
   link.addEventListener("click", (event) => {
     event.preventDefault();
     if (link.id === "addSubscription") return;
+    document.querySelector("#mobileNavMore")?.removeAttribute("open");
     setRoute(link.dataset.route);
   });
 });
@@ -2401,6 +3227,10 @@ field("status").addEventListener("change", toggleRenewalFields);
 
 document.querySelector("#themeToggle").addEventListener("click", toggleTheme);
 document.querySelector("#sidebarThemeToggle").addEventListener("click", toggleTheme);
+
+[editorDialog, unlockDialog, deleteDialog, importPreviewDialog].forEach((dialog) => {
+  dialog?.addEventListener("close", () => restoreDialogFocus(dialog));
+});
 
 avatarUpload.addEventListener("change", async () => {
   const file = avatarUpload.files?.[0];
@@ -2453,7 +3283,20 @@ document.querySelector("#deleteConfirm").addEventListener("click", (event) => {
   pendingDeleteDocumentId = "";
 });
 
+importPreviewCancel?.addEventListener("click", () => {
+  pendingImportSubscriptions = [];
+  pendingImportSkipped = 0;
+});
+
+importPreviewConfirm?.addEventListener("click", (event) => {
+  event.preventDefault();
+  importPreviewDialog.close();
+  confirmImportPreview();
+});
+
 load();
+initDatePickers();
+initFormAccordions();
 renderPresets();
 toggleFamilyFields();
 toggleRenewalFields();

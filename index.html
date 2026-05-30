@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Abo Pilot</title>
-    <link rel="stylesheet" href="styles.css?v=20260529-13" />
+    <link rel="stylesheet" href="styles.css?v=20260530-10" />
   </head>
   <body>
     <div class="app">
@@ -48,23 +48,32 @@
             <svg viewBox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 9h15M6.5 5h11A2.5 2.5 0 0 1 20 7.5v10A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5v-10A2.5 2.5 0 0 1 6.5 5ZM8 13h3M13 13h3M8 16h3" /></svg>
             Fristen
           </a>
-          <a href="#policies" data-route="policies">
+          <a class="secondary-nav-link" href="#policies" data-route="policies">
             <svg viewBox="0 0 24 24"><path d="M12 3 5.5 5.5v5.8c0 4.2 2.7 7.9 6.5 9.2 3.8-1.3 6.5-5 6.5-9.2V5.5L12 3ZM9 12l2 2 4-4" /></svg>
             Policen
           </a>
-          <a href="#archive" data-route="archive">
+          <a class="secondary-nav-link" href="#archive" data-route="archive">
             <svg viewBox="0 0 24 24"><path d="M4 7h16M6 7v12h12V7M9 11h6M8 4h8l1 3H7l1-3Z" /></svg>
             Archiv
           </a>
-          <a href="#security" data-route="security">
+          <a class="secondary-nav-link" href="#security" data-route="security">
             <svg viewBox="0 0 24 24"><path d="M7 11V8a5 5 0 0 1 10 0v3M6.8 11h10.4c.9 0 1.6.7 1.6 1.6v6.8c0 .9-.7 1.6-1.6 1.6H6.8c-.9 0-1.6-.7-1.6-1.6v-6.8c0-.9.7-1.6 1.6-1.6Z" /></svg>
             Sicherheit
           </a>
-          <a href="#saas" data-route="saas">
+          <a class="secondary-nav-link" href="#saas" data-route="saas">
             <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 16V9M12 16V7M16 16v-5M20 16v-3" /></svg>
             SaaS Admin
           </a>
         </nav>
+        <details class="mobile-nav-more" id="mobileNavMore">
+          <summary>Mehr</summary>
+          <div class="mobile-more-links">
+            <a href="#policies" data-route="policies">Policen</a>
+            <a href="#archive" data-route="archive">Archiv</a>
+            <a href="#security" data-route="security">Sicherheit</a>
+            <a href="#saas" data-route="saas">SaaS Admin</a>
+          </div>
+        </details>
 
         <section class="quick-card">
           <span class="mini-label">SaaS bereit</span>
@@ -88,7 +97,7 @@
           <div class="topbar-actions">
             <label class="search-field">
               <svg viewBox="0 0 24 24"><path d="m21 21-4.4-4.4M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg>
-              <input id="globalSearch" type="search" placeholder="Bestand durchsuchen" />
+              <input id="globalSearch" type="search" placeholder="Bestand durchsuchen…" />
             </label>
             <button class="icon-button" id="themeToggle" type="button" aria-label="Darstellung wechseln">
               <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z" /></svg>
@@ -99,7 +108,7 @@
         <section class="command-strip page-view" data-page="dashboard" aria-label="Schnellerfassung">
           <label class="hero-search">
             <svg viewBox="0 0 24 24"><path d="m21 21-4.4-4.4M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg>
-            <input id="commandProviderSearch" type="search" list="providerList" placeholder="Vorlage suchen, z. B. Swisscom" />
+            <input id="commandProviderSearch" type="search" list="providerList" placeholder="Vorlage suchen, z. B. Swisscom…" />
           </label>
           <select id="quickCategory" aria-label="Kategorie schnell filtern">
             <option>Alle Kategorien</option>
@@ -121,6 +130,7 @@
             <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 16V9M12 16V7M16 16v-5M20 16v-3" /></svg>
             Auswerten
           </button>
+          <p class="filter-summary" id="dashboardFilterSummary" aria-live="polite"></p>
         </section>
 
         <section class="metric-grid page-view" id="dashboard" data-page="dashboard" aria-label="Kennzahlen">
@@ -177,7 +187,10 @@
                 <span class="mini-label">Kalender</span>
                 <h2>Fristen-Zentrale</h2>
               </div>
-              <span class="status-pill" id="deadlineStatus">0 offen</span>
+              <div class="panel-actions">
+                <button class="button subtle" id="exportIcs" type="button">ICS exportieren</button>
+                <span class="status-pill" id="deadlineStatus">0 offen</span>
+              </div>
             </div>
             <div id="deadlineAgenda" class="deadline-agenda-list"></div>
           </article>
@@ -191,9 +204,20 @@
             </div>
             <div id="renewalCalendar" class="calendar-grid"></div>
           </article>
+
+          <article class="panel reminder-overview">
+            <div class="panel-heading">
+              <div>
+                <span class="mini-label">Reminder</span>
+                <h2>Lokale Übersicht</h2>
+              </div>
+              <span class="status-pill" id="reminderStatus">0 geplant</span>
+            </div>
+            <div id="reminderOverview" class="reminder-list"></div>
+          </article>
         </section>
 
-        <dialog id="editorDialog" class="editor-dialog">
+        <dialog id="editorDialog" class="editor-dialog" aria-labelledby="editorTitle">
           <article class="panel form-panel" aria-label="Abo erfassen">
             <div class="panel-heading">
               <div>
@@ -210,18 +234,20 @@
               <fieldset>
                 <legend>Basisdaten</legend>
                 <label class="full">
-                  Anbieter suchen
-                  <input id="providerSearch" type="search" list="providerList" placeholder="z. B. Netflix, NZZ, Swisscom" />
+                  Vorlage / Anbieter
+                  <input id="providerSearch" name="providerSearch" type="search" list="providerList" autocomplete="off" placeholder="z. B. Netflix, NZZ, Swisscom…" aria-describedby="providerSearchHint" />
+                  <small class="field-hint" id="providerSearchHint">Optional. Eine Vorlage füllt Titel, Kategorie und typische Vertragsdaten vor.</small>
                   <datalist id="providerList"></datalist>
                 </label>
                 <div class="provider-chips" id="providerChips" aria-label="Gängige Abos"></div>
                 <label>
-                  Name
-                  <input id="name" required placeholder="z. B. Familien Mobile XL" />
+                  Titel des Abos <span class="required-mark">Pflicht</span>
+                  <input id="name" name="subscriptionName" required autocomplete="organization" placeholder="z. B. Familien Mobile XL…" aria-describedby="nameHint" />
+                  <small class="field-hint" id="nameHint">Wird aus der Vorlage übernommen, bis du ihn selbst änderst.</small>
                 </label>
                 <label>
                   Kategorie
-                  <select id="category">
+                  <select id="category" name="category">
                     <option>Zeitung</option>
                     <option>Magazin</option>
                     <option>Online-Abo</option>
@@ -234,12 +260,13 @@
                   </select>
                 </label>
                 <label>
-                  Kosten
-                  <input id="amount" required type="number" min="0" step="0.05" placeholder="19.90" />
+                  Kosten <span class="optional-mark">optional</span>
+                  <input id="amount" name="amount" type="number" min="0" step="0.05" inputmode="decimal" placeholder="19.90" aria-describedby="amountHint" />
+                  <small class="field-hint" id="amountHint">Leer oder 0 wird als Betrag fehlt markiert.</small>
                 </label>
                 <label>
                   Intervall
-                  <select id="interval">
+                  <select id="interval" name="interval">
                     <option value="monthly">Monatlich</option>
                     <option value="quarterly">Quartalsweise</option>
                     <option value="yearly">Jährlich</option>
@@ -252,23 +279,24 @@
                 <legend>Fristen</legend>
                 <label>
                   Startdatum
-                  <input id="startDate" type="date" />
+                  <input id="startDate" name="startDate" type="date" />
                 </label>
                 <label>
                   Erneuerung
-                  <input id="renewalDate" type="date" />
+                  <input id="renewalDate" name="renewalDate" type="date" aria-describedby="renewalDateHint" />
+                  <small class="field-hint" id="renewalDateHint">Relevant für automatische Kündigungsfristen.</small>
                 </label>
                 <label id="endDateLabel">
                   Bis-/Enddatum
-                  <input id="endDate" type="date" />
+                  <input id="endDate" name="endDate" type="date" />
                 </label>
                 <label class="check-label full" id="noRenewalLabel">
-                  <input id="noRenewal" type="checkbox" />
+                  <input id="noRenewal" name="noRenewal" type="checkbox" />
                   <span>Keine Erneuerung / einmalige Police</span>
                 </label>
                 <label>
                   Kündigungsfrist
-                  <select id="noticeDays">
+                  <select id="noticeDays" name="noticeDays">
                     <option value="1">1 Tag</option>
                     <option value="7">7 Tage</option>
                     <option value="14">14 Tage</option>
@@ -280,11 +308,13 @@
                 </label>
                 <label>
                   Status
-                  <select id="status">
+                  <select id="status" name="status">
                     <option value="Aktiv">Aktiv</option>
-                    <option value="Probeabo">Probeabo</option>
-                    <option value="Gekuendigt">Gekündigt</option>
                     <option value="Pausiert">Pausiert</option>
+                    <option value="KuendigungVorbereitet">Kündigung vorbereitet</option>
+                    <option value="KuendigungGesendet">Kündigung gesendet</option>
+                    <option value="Bestaetigt">Bestätigt / beendet</option>
+                    <option value="Archiviert">Archiviert</option>
                   </select>
                 </label>
               </fieldset>
@@ -293,15 +323,15 @@
                 <legend>Struktur</legend>
                 <label class="full">
                   Tags
-                  <input id="tags" placeholder="z. B. Familie, Steuer, kritisch" />
+                  <input id="tags" name="tags" autocomplete="off" placeholder="z. B. Familie, Steuer, kritisch…" />
                 </label>
                 <label>
                   Reminder-Datum
-                  <input id="reminderDate" type="date" />
+                  <input id="reminderDate" name="reminderDate" type="date" />
                 </label>
                 <label>
                   Reminder-Kanal
-                  <select id="reminderChannel">
+                  <select id="reminderChannel" name="reminderChannel">
                     <option value="none">Noch keiner</option>
                     <option value="app">App</option>
                     <option value="email">E-Mail</option>
@@ -314,15 +344,15 @@
                 <legend>Kontakt</legend>
                 <label>
                   Login-E-Mail
-                  <input id="loginEmail" type="email" placeholder="name@example.com" />
+                  <input id="loginEmail" name="loginEmail" type="email" autocomplete="email" placeholder="name@example.com…" />
                 </label>
                 <label>
                   Anbieter-E-Mail
-                  <input id="supportEmail" type="email" placeholder="support@anbieter.ch" />
+                  <input id="supportEmail" name="supportEmail" type="email" autocomplete="email" placeholder="support@anbieter.ch…" />
                 </label>
                 <label class="full">
                   Adresse / Kontakt
-                  <textarea id="address" rows="3" placeholder="Verlag, Kundendienst, Postadresse oder Support-Link"></textarea>
+                  <textarea id="address" name="address" rows="3" autocomplete="street-address" placeholder="Verlag, Kundendienst, Postadresse oder Support-Link…"></textarea>
                 </label>
               </fieldset>
 
@@ -330,19 +360,19 @@
                 <legend>Familie und SIM</legend>
                 <label>
                   Familienmitglied
-                  <input id="familyMember" placeholder="z. B. Anna" />
+                  <input id="familyMember" name="familyMember" autocomplete="given-name" placeholder="z. B. Anna…" />
                 </label>
                 <label>
                   SIM / Vertragsnummer
-                  <input id="contractNumber" placeholder="Kundennummer, SIM, Vertrag" />
+                  <input id="contractNumber" name="contractNumber" autocomplete="off" placeholder="Kundennummer, SIM, Vertrag…" />
                 </label>
                 <label>
                   PIN
-                  <input id="pin" type="password" inputmode="numeric" placeholder="nur für Handy-Abos" />
+                  <input id="pin" name="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="nur für Handy-Abos…" />
                 </label>
                 <label>
                   PUK
-                  <input id="puk" type="password" inputmode="numeric" placeholder="optional" />
+                  <input id="puk" name="puk" type="password" inputmode="numeric" autocomplete="off" placeholder="optional…" />
                 </label>
               </fieldset>
 
@@ -350,7 +380,7 @@
                 <legend>Dokumente</legend>
                 <label class="full file-upload">
                   PDF hinzufügen
-                  <input id="documentUpload" type="file" accept="application/pdf,.pdf" multiple />
+                  <input id="documentUpload" name="documents" type="file" accept="application/pdf,.pdf" multiple />
                   <small>PDFs werden lokal im Browser gespeichert. Für grosse Archive später Backend/Speicher anbinden.</small>
                 </label>
               </fieldset>
@@ -359,14 +389,17 @@
                 <legend>Notizen</legend>
                 <label class="full">
                   Notizen
-                  <textarea id="notes" rows="3" placeholder="Kündigungsweg, Besonderheiten, letzte Preisänderung"></textarea>
+                  <textarea id="notes" name="notes" rows="3" placeholder="Kündigungsweg, Besonderheiten, letzte Preisänderung…"></textarea>
                 </label>
               </fieldset>
 
-              <button class="button primary full" id="saveSubscription" type="submit">
-                <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
-                Abo speichern
-              </button>
+              <div class="form-actions-sticky full">
+                <button class="button subtle" id="closeEditorSecondary" type="button">Abbrechen</button>
+                <button class="button primary" id="saveSubscription" type="submit">
+                  <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+                  Abo speichern
+                </button>
+              </div>
             </form>
           </article>
         </dialog>
@@ -382,17 +415,19 @@
                 <div class="segmented" role="tablist" aria-label="Filter">
                   <button class="segment active" type="button" data-filter="all">Alle</button>
                   <button class="segment" type="button" data-filter="due">Frist</button>
-                  <button class="segment" type="button" data-filter="canceled">Gekündigt</button>
+                  <button class="segment" type="button" data-filter="incomplete">Prüfen</button>
+                  <button class="segment" type="button" data-filter="canceled">Kündigung</button>
                 </div>
                 <button class="button primary" id="addCoreSubscription" type="button">Abo hinzufügen</button>
               </div>
             </div>
+            <p class="panel-helper" id="subscriptionFilterHint">Globale Suche durchsucht alle Vertragsdaten; die Segmentfilter wirken nur auf diese Abo-Liste.</p>
             <div class="subscription-list" id="subscriptionList"></div>
             <section class="canceled-active-section" id="canceledActiveSection">
               <div class="inline-heading">
                 <div>
-                  <span class="mini-label">Gekündigt</span>
-                  <h3>Noch aktiv bis Enddatum</h3>
+                  <span class="mini-label">Kündigung</span>
+                  <h3>In Bearbeitung oder noch aktiv</h3>
                 </div>
                 <span class="status-pill status-canceled" id="canceledActiveCount">0</span>
               </div>
@@ -421,6 +456,8 @@
               </div>
               <button class="button primary" id="addPhoneSubscription" type="button">Handy hinzufügen</button>
             </div>
+            <div class="family-filter-bar" id="familyFilterBar" aria-label="Familienmitglied filtern"></div>
+            <div class="family-member-summary" id="familyMemberSummary" aria-label="Kosten und Fristen pro Familienmitglied"></div>
             <div id="familyOverview" class="compact-list"></div>
           </article>
           <aside class="panel feature-panel">
@@ -485,6 +522,11 @@
                 <span class="mini-label">Sicherheit</span>
                 <h2>Sensible Daten</h2>
               </div>
+              <div class="panel-actions">
+                <button class="button subtle" id="importBackup" type="button">Backup importieren</button>
+                <button class="button primary" id="exportBackup" type="button">Backup exportieren</button>
+                <input class="visually-hidden" id="backupImportFile" type="file" accept="application/json,.json" />
+              </div>
             </div>
             <div id="securitySummary" class="compact-list"></div>
           </article>
@@ -504,11 +546,11 @@
       </main>
     </div>
 
-    <dialog id="unlockDialog" class="unlock-dialog">
+    <dialog id="unlockDialog" class="unlock-dialog" aria-labelledby="unlockDialogTitle" aria-describedby="unlockDialogText">
       <form method="dialog">
-        <h2>PIN anzeigen</h2>
-        <p>Gib das Master-Passwort ein, um sensible Handy-Daten kurz sichtbar zu machen.</p>
-        <input id="masterPassword" type="password" placeholder="Master-Passwort" />
+        <h2 id="unlockDialogTitle">PIN anzeigen</h2>
+        <p id="unlockDialogText">Gib das Master-Passwort ein, um sensible Handy-Daten kurz sichtbar zu machen.</p>
+        <input id="masterPassword" name="masterPassword" type="password" autocomplete="current-password" placeholder="Master-Passwort" />
         <menu>
           <button class="button subtle" value="cancel">Abbrechen</button>
           <button class="button primary" id="unlockConfirm" value="default">Entsperren</button>
@@ -516,7 +558,7 @@
       </form>
     </dialog>
 
-    <dialog id="deleteDialog" class="unlock-dialog">
+    <dialog id="deleteDialog" class="unlock-dialog" aria-labelledby="deleteDialogTitle" aria-describedby="deleteDialogText">
       <form method="dialog">
         <h2 id="deleteDialogTitle">Eintrag löschen?</h2>
         <p id="deleteDialogText">Dieser Eintrag wird aus diesem Browser entfernt.</p>
@@ -527,7 +569,19 @@
       </form>
     </dialog>
 
+    <dialog id="importPreviewDialog" class="unlock-dialog import-preview-dialog" aria-labelledby="importPreviewTitle" aria-describedby="importPreviewText">
+      <form method="dialog">
+        <h2 id="importPreviewTitle">Backup prüfen</h2>
+        <p id="importPreviewText">Die Datei wurde gelesen. Prüfe die Vorschau, bevor neue Einträge übernommen werden.</p>
+        <div id="importPreviewContent" class="import-preview-content"></div>
+        <menu>
+          <button class="button subtle" id="importPreviewCancel" value="cancel">Abbrechen</button>
+          <button class="button primary" id="importPreviewConfirm" value="default">Import übernehmen</button>
+        </menu>
+      </form>
+    </dialog>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260529-13"></script>
+    <script src="app.js?v=20260530-10"></script>
   </body>
 </html>
