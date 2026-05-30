@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+.agents
+CHAT_HANDOFF.md
+skills-lock.json
+docs
+README.md
+DEPLOYMENT.md
+SAAS_PLAN.md
