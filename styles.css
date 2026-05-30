@@ -1584,6 +1584,9 @@ textarea:focus {
 .subscription-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "main price"
+    "actions actions";
   gap: 10px;
   padding: 11px;
   background: var(--surface);
@@ -1622,6 +1625,7 @@ textarea:focus {
 }
 
 .subscription-main {
+  grid-area: main;
   display: grid;
   gap: 6px;
   min-width: 0;
@@ -1661,17 +1665,25 @@ textarea:focus {
 }
 
 .subscription-side {
+  display: contents;
+}
+
+.subscription-price {
+  grid-area: price;
   display: grid;
   justify-items: end;
-  gap: 6px;
+  align-content: start;
+  gap: 3px;
+  white-space: nowrap;
 }
 
 .subscription-actions {
+  grid-area: actions;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 5px;
-  min-width: 190px;
+  min-width: 0;
 }
 
 .row-action {
@@ -2457,6 +2469,10 @@ body.dark .provider-chip {
 
   .subscription-row {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "main"
+      "price"
+      "actions";
   }
 
   .subscription-title {
@@ -2492,7 +2508,7 @@ body.dark .provider-chip {
     grid-template-columns: 1fr;
   }
 
-  .subscription-side,
+  .subscription-price,
   .subscription-actions {
     justify-items: start;
     justify-content: flex-start;

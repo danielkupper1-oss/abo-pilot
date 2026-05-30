@@ -2464,8 +2464,10 @@ function subscriptionRowMarkup(subscription, options = {}) {
         </div>
       </div>
       <div class="subscription-side">
-        <span class="price ${hasMissingAmount(subscription) ? "is-missing" : ""}">${amountLabel(subscription)}</span>
-        <small>${intervalLabel(subscription.interval)}</small>
+        <div class="subscription-price">
+          <span class="price ${hasMissingAmount(subscription) ? "is-missing" : ""}">${amountLabel(subscription)}</span>
+          <small>${intervalLabel(subscription.interval)}</small>
+        </div>
         <div class="subscription-actions" aria-label="Abo-Aktionen">
           ${dueSoon && !canceled ? `<button class="button warning row-action" type="button" data-action="deadline" data-id="${subscription.id}">Frist</button>` : ""}
           <button class="button subtle row-action" type="button" data-action="edit" data-id="${subscription.id}">Bearbeiten</button>
